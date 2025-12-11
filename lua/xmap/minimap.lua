@@ -96,103 +96,161 @@ function M.create_window(bufnr)
   return win
 end
 
--- Calculate code density for a line
--- @param line string: Line content
--- @return number: Density value 0-1
-function M.calculate_density(line)
-  local trimmed = vim.trim(line)
-  if #trimmed == 0 then
-    return 0
+-- Extract node name from Tree-sitter node
+-- @param node TSNode: Tree-sitter node
+-- @param bufnr number: Buffer number
+-- @return string: Node name or empty string
+function M.get_node_name(node, bufnr)
+  if not node then
+    return ""
   end
 
-  -- Count non-whitespace characters
-  local non_ws = trimmed:gsub("%s+", "")
-  return #non_ws / math.max(#line, 1)
-end
+  -- Check if we have the get_node_text function (Neovim 0.9+)
+  local has_get_text = vim.treesitter.get_node_text ~= nil
 
--- Render a block representing multiple source lines
--- @param lines table: Source lines in this block
--- @param block_info table: Additional info (has functions, etc.)
--- @return string: Rendered block line
-function M.render_block(lines, block_info)
-  local opts = config.get()
-
-  if #lines == 0 then
-    return string.rep(" ", opts.width - 2)
+  if not has_get_text then
+    -- Fallback for older Neovim versions
+    return node:type()
   end
 
-  -- Calculate average density for this block
-  local total_density = 0
-  local non_empty = 0
-
-  for _, line in ipairs(lines) do
-    local density = M.calculate_density(line)
-    if density > 0 then
-      total_density = total_density + density
-      non_empty = non_empty + 1
+  -- Try to get the name from child nodes
+  for child in node:iter_children() do
+    local type = child:type()
+    if type == "identifier" or type == "simple_identifier" or type == "type_identifier" then
+      local ok, name = pcall(vim.treesitter.get_node_text, child, bufnr)
+      if ok and name then
+        return name
+      end
     end
   end
 
-  local avg_density = non_empty > 0 and (total_density / non_empty) or 0
-
-  -- Choose block character based on density
-  local char
-  if avg_density > 0.6 then
-    char = "█"
-  elseif avg_density > 0.4 then
-    char = "▓"
-  elseif avg_density > 0.2 then
-    char = "▒"
-  elseif avg_density > 0 then
-    char = "░"
-  else
-    char = " "
+  -- Fallback: try to get text from the node itself (first 30 chars)
+  local ok, text = pcall(vim.treesitter.get_node_text, node, bufnr)
+  if ok and text then
+    local first_line = text:match("([^\n]*)")
+    if first_line then
+      -- Clean up the text
+      first_line = vim.trim(first_line)
+      -- Truncate if too long
+      if #first_line > 30 then
+        return first_line:sub(1, 27) .. "..."
+      end
+      return first_line
+    end
   end
 
-  return string.rep(char, opts.width - 2)
+  return ""
 end
 
--- Render entire buffer content for minimap with scaling
+-- Calculate relative line indicator
+-- @param current_line number: Current cursor line
+-- @param target_line number: Target line
+-- @return string: Formatted indicator like "[↓ 5]" or "[↑ 15]"
+function M.format_relative_indicator(current_line, target_line)
+  local distance = target_line - current_line
+
+  if distance == 0 then
+    return "[•]"
+  elseif distance > 0 then
+    return string.format("[↓ %d]", distance)
+  else
+    return string.format("[↑ %d]", math.abs(distance))
+  end
+end
+
+-- Render minimap with structure names and relative indicators
 -- @param main_bufnr number: Main buffer to render
+-- @param current_line number: Current cursor line in main buffer
 -- @param minimap_height number: Target height for minimap
 -- @return table: {lines = {}, mapping = {}}
-function M.render_buffer(main_bufnr, minimap_height)
+function M.render_buffer(main_bufnr, current_line, minimap_height)
   if not vim.api.nvim_buf_is_valid(main_bufnr) then
     return { lines = {}, mapping = {} }
   end
 
-  local source_lines = vim.api.nvim_buf_get_lines(main_bufnr, 0, -1, false)
-  local total_source_lines = #source_lines
+  local opts = config.get()
+  local filetype = vim.api.nvim_buf_get_option(main_bufnr, "filetype")
 
-  if total_source_lines == 0 then
-    return { lines = {}, mapping = {} }
+  -- Get structural nodes from Tree-sitter
+  local nodes = {}
+  if config.is_treesitter_enabled(filetype) then
+    nodes = treesitter.get_structural_nodes(main_bufnr, filetype)
   end
 
   local rendered = {}
-  local mapping = {}  -- mapping[minimap_line] = {start_line, end_line}
+  local mapping = {}
 
-  -- Calculate how many source lines per minimap line
-  local lines_per_block = math.max(1, math.ceil(total_source_lines / minimap_height))
+  if #nodes == 0 then
+    -- Fallback: show line-based overview
+    local source_lines = vim.api.nvim_buf_get_lines(main_bufnr, 0, -1, false)
+    local total_source_lines = #source_lines
 
-  local minimap_line = 1
-  local source_idx = 1
-
-  while source_idx <= total_source_lines and minimap_line <= minimap_height do
-    -- Get lines for this block
-    local block_start = source_idx
-    local block_end = math.min(source_idx + lines_per_block - 1, total_source_lines)
-
-    local block_lines = {}
-    for i = block_start, block_end do
-      table.insert(block_lines, source_lines[i])
+    if total_source_lines == 0 then
+      return { lines = {}, mapping = {} }
     end
 
-    -- Render this block
-    rendered[minimap_line] = M.render_block(block_lines, {})
-    mapping[minimap_line] = { start_line = block_start, end_line = block_end }
+    -- Show every Nth line
+    local lines_per_block = math.max(1, math.ceil(total_source_lines / minimap_height))
 
-    minimap_line = minimap_line + 1
-    source_idx = block_end + 1
+    local minimap_line = 1
+    for i = 1, total_source_lines, lines_per_block do
+      local line_text = vim.trim(source_lines[i])
+      if #line_text > 25 then
+        line_text = line_text:sub(1, 22) .. "..."
+      end
+
+      local indicator = M.format_relative_indicator(current_line, i)
+      rendered[minimap_line] = string.format("%-25s %s", line_text, indicator)
+      mapping[minimap_line] = { start_line = i, end_line = i }
+
+      minimap_line = minimap_line + 1
+    end
+  else
+    -- Show structural elements with names and indicators
+    for i, node in ipairs(nodes) do
+      if i > minimap_height then
+        break
+      end
+
+      -- Get node name
+      local name = M.get_node_name(node.node, main_bufnr)
+      if name == "" then
+        name = node.type
+      end
+
+      -- Add indentation based on nesting (approximate)
+      local indent = ""
+      local depth = 0
+      -- Simple heuristic: deeper nodes have larger line ranges that are contained in others
+      for _, other_node in ipairs(nodes) do
+        if other_node ~= node and
+           other_node.start_line <= node.start_line and
+           other_node.end_line >= node.end_line and
+           (other_node.end_line - other_node.start_line) > (node.end_line - node.start_line) then
+          depth = depth + 1
+        end
+      end
+      depth = math.min(depth, 4) -- Max 4 levels of indentation
+      indent = string.rep("  ", depth)
+
+      -- Format the line
+      local display_name = indent .. name
+      local max_name_length = opts.width - 10 -- Leave space for indicator
+
+      if #display_name > max_name_length then
+        display_name = display_name:sub(1, max_name_length - 3) .. "..."
+      end
+
+      -- Calculate relative indicator
+      local node_line = node.start_line + 1 -- Convert to 1-indexed
+      local indicator = M.format_relative_indicator(current_line, node_line)
+
+      -- Format with padding
+      local line = string.format("%-" .. max_name_length .. "s %s", display_name, indicator)
+
+      rendered[i] = line
+      mapping[i] = { start_line = node_line, end_line = node.end_line + 1 }
+    end
   end
 
   return { lines = rendered, mapping = mapping }
@@ -306,14 +364,20 @@ function M.update()
     return
   end
 
+  -- Get current cursor line in main buffer
+  local current_line = 1
+  if M.state.main_winid and vim.api.nvim_win_is_valid(M.state.main_winid) then
+    current_line = navigation.get_main_cursor_line(M.state.main_winid)
+  end
+
   -- Get minimap window height
   local minimap_height = 50  -- default
   if M.state.winid and vim.api.nvim_win_is_valid(M.state.winid) then
     minimap_height = vim.api.nvim_win_get_height(M.state.winid)
   end
 
-  -- Render buffer content with scaling
-  local result = M.render_buffer(M.state.main_bufnr, minimap_height)
+  -- Render buffer content with current line for relative indicators
+  local result = M.render_buffer(M.state.main_bufnr, current_line, minimap_height)
   M.state.line_mapping = result.mapping
 
   -- Update minimap buffer
@@ -324,14 +388,12 @@ function M.update()
   -- Apply syntax highlighting
   M.apply_syntax_highlighting(M.state.bufnr, M.state.main_bufnr, M.state.line_mapping)
 
-  -- Highlight viewport and cursor
+  -- Highlight current item in minimap (the one closest to cursor)
   if M.state.main_winid and vim.api.nvim_win_is_valid(M.state.main_winid) then
-    M.highlight_viewport(M.state.bufnr, M.state.main_winid, M.state.line_mapping)
     M.highlight_cursor(M.state.bufnr, M.state.main_winid, M.state.line_mapping)
 
     -- Update minimap cursor position to match current editor line
-    local main_line = navigation.get_main_cursor_line(M.state.main_winid)
-    local minimap_line = M.source_to_minimap_line(main_line, M.state.line_mapping)
+    local minimap_line = M.source_to_minimap_line(current_line, M.state.line_mapping)
 
     if minimap_line and M.state.winid and vim.api.nvim_win_is_valid(M.state.winid) then
       pcall(vim.api.nvim_win_set_cursor, M.state.winid, { minimap_line, 0 })

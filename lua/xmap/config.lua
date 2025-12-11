@@ -49,15 +49,17 @@ M.defaults = {
 
     -- Update frequency (milliseconds)
     -- Throttle minimap updates to avoid performance issues
-    throttle_ms = 100,
+    -- Set lower for responsive relative indicators
+    throttle_ms = 50,
   },
 
   -- Navigation settings
   navigation = {
-    -- Show relative line indicator when navigating
-    show_relative_line = true,
+    -- Show relative line indicator when jumping (notification)
+    -- Note: Indicators are always visible in minimap, this is for jump confirmation
+    show_relative_line = false,  -- Disabled by default since indicators are in minimap
 
-    -- How to display relative line info:
+    -- How to display relative line info when jumping:
     -- "notify" - use vim.notify
     -- "float" - floating window
     -- "virtual" - virtual text in minimap
