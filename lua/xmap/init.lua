@@ -153,6 +153,6 @@ function M.update_config(opts)
 end
 
 -- Get plugin version
-M.version = "0.1.0"
+M.version = "1.0.0"
 
 return M
