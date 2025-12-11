@@ -20,15 +20,24 @@ M.groups = {
   -- Cursor/selection in minimap
   XmapCursor = { link = "CursorLine" },
 
-  -- Tree-sitter scope highlights
-  XmapFunction = { link = "Function" },
-  XmapClass = { link = "Type" },
-  XmapMethod = { link = "Function" },
-  XmapVariable = { link = "Identifier" },
-  XmapComment = { link = "Comment" },
-  XmapKeyword = { link = "Keyword" },
-  XmapString = { link = "String" },
-  XmapNumber = { link = "Number" },
+  -- Swift structural highlights (matching editor)
+  XmapFunction = { link = "@function" },
+  XmapClass = { link = "@type" },
+  XmapStruct = { link = "@type" },
+  XmapEnum = { link = "@type" },
+  XmapProtocol = { link = "@interface" },
+  XmapExtension = { link = "@type" },
+  XmapProperty = { link = "@property" },
+  XmapInit = { link = "@constructor" },
+  XmapMethod = { link = "@method" },
+
+  -- MARK comments (section headers)
+  XmapMark = { link = "Title" },
+
+  -- Fallback highlights
+  XmapVariable = { link = "@variable" },
+  XmapComment = { link = "@comment" },
+  XmapKeyword = { link = "@keyword" },
 
   -- Structural indicators
   XmapScope = { link = "Title" },

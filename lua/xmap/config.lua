@@ -11,10 +11,22 @@ M.defaults = {
   auto_open = false, -- Automatically open minimap for supported filetypes
 
   -- Filetypes where minimap should be enabled
-  filetypes = { "swift", "lua", "typescript", "javascript", "python", "rust", "go", "c", "cpp" },
+  filetypes = { "swift" },
 
   -- Filetypes to exclude
   exclude_filetypes = { "help", "terminal", "prompt", "qf", "neo-tree", "NvimTree" },
+
+  -- Swift-specific settings
+  swift = {
+    -- Show MARK comments as section headers
+    show_marks = true,
+
+    -- MARK comment patterns to detect
+    mark_patterns = {
+      "^%s*//+%s*MARK:%s*-?%s*(.*)$",  -- // MARK: - Section or // MARK: Section
+      "^%s*//+%s*MARK%s*-?%s*(.*)$",    -- // MARK - Section or // MARK Section
+    },
+  },
 
   -- Keymaps (set to false to disable default mappings)
   keymaps = {
@@ -28,7 +40,7 @@ M.defaults = {
   treesitter = {
     enable = true, -- Enable Tree-sitter integration
     highlight_scopes = true, -- Highlight structural scopes (functions, classes, etc.)
-    languages = { "swift", "lua", "typescript", "javascript", "python", "rust", "go", "c", "cpp" },
+    languages = { "swift" },
   },
 
   -- Rendering options

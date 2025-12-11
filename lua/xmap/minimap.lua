@@ -171,10 +171,14 @@ function M.render_buffer(main_bufnr, current_line, minimap_height)
   local opts = config.get()
   local filetype = vim.api.nvim_buf_get_option(main_bufnr, "filetype")
 
-  -- Get structural nodes from Tree-sitter
+  -- Get structural nodes from Tree-sitter (including MARK comments for Swift)
   local nodes = {}
   if config.is_treesitter_enabled(filetype) then
-    nodes = treesitter.get_structural_nodes(main_bufnr, filetype)
+    if filetype == "swift" then
+      nodes = treesitter.get_swift_structure(main_bufnr, filetype)
+    else
+      nodes = treesitter.get_structural_nodes(main_bufnr, filetype)
+    end
   end
 
   local rendered = {}
@@ -212,29 +216,40 @@ function M.render_buffer(main_bufnr, current_line, minimap_height)
         break
       end
 
-      -- Get node name
-      local name = M.get_node_name(node.node, main_bufnr)
-      if name == "" then
-        name = node.type
-      end
+      local display_name
+      local node_line = node.start_line + 1 -- Convert to 1-indexed
 
-      -- Add indentation based on nesting (approximate)
-      local indent = ""
-      local depth = 0
-      -- Simple heuristic: deeper nodes have larger line ranges that are contained in others
-      for _, other_node in ipairs(nodes) do
-        if other_node ~= node and
-           other_node.start_line <= node.start_line and
-           other_node.end_line >= node.end_line and
-           (other_node.end_line - other_node.start_line) > (node.end_line - node.start_line) then
-          depth = depth + 1
+      -- Handle MARK comments specially
+      if node.type == "mark" then
+        -- MARK comments are shown as section headers
+        display_name = "━ " .. node.mark_text
+      else
+        -- Get node name for regular structural elements
+        local name = M.get_node_name(node.node, main_bufnr)
+        if name == "" then
+          name = node.type
         end
+
+        -- Add indentation based on nesting (approximate)
+        local indent = ""
+        local depth = 0
+        -- Simple heuristic: deeper nodes have larger line ranges that are contained in others
+        for _, other_node in ipairs(nodes) do
+          if other_node ~= node and
+             other_node.type ~= "mark" and
+             other_node.start_line <= node.start_line and
+             other_node.end_line >= node.end_line and
+             (other_node.end_line - other_node.start_line) > (node.end_line - node.start_line) then
+            depth = depth + 1
+          end
+        end
+        depth = math.min(depth, 4) -- Max 4 levels of indentation
+        indent = string.rep("  ", depth)
+
+        display_name = indent .. name
       end
-      depth = math.min(depth, 4) -- Max 4 levels of indentation
-      indent = string.rep("  ", depth)
 
       -- Format the line
-      local display_name = indent .. name
       local max_name_length = opts.width - 10 -- Leave space for indicator
 
       if #display_name > max_name_length then
@@ -242,14 +257,13 @@ function M.render_buffer(main_bufnr, current_line, minimap_height)
       end
 
       -- Calculate relative indicator
-      local node_line = node.start_line + 1 -- Convert to 1-indexed
       local indicator = M.format_relative_indicator(current_line, node_line)
 
       -- Format with padding
       local line = string.format("%-" .. max_name_length .. "s %s", display_name, indicator)
 
       rendered[i] = line
-      mapping[i] = { start_line = node_line, end_line = node.end_line + 1 }
+      mapping[i] = { start_line = node_line, end_line = node.end_line + 1, node_type = node.type }
     end
   end
 
@@ -275,18 +289,11 @@ function M.apply_syntax_highlighting(minimap_bufnr, main_bufnr, mapping)
   -- Clear previous syntax highlights
   highlight.clear(minimap_bufnr, M.ns_syntax)
 
-  -- Get structural nodes from Tree-sitter
-  local nodes = treesitter.get_structural_nodes(main_bufnr, filetype)
-
-  -- For each minimap line, check if it contains structural nodes
+  -- Apply highlights based on node_type stored in mapping
   for minimap_line, range in pairs(mapping) do
-    for _, node in ipairs(nodes) do
-      -- Check if node overlaps with this block
-      if node.start_line <= range.end_line and node.end_line >= range.start_line then
-        local hl_group = treesitter.get_highlight_for_type(node.type)
-        highlight.apply(minimap_bufnr, M.ns_syntax, hl_group, minimap_line - 1, 0, -1)
-        break -- Only apply one highlight per line
-      end
+    if range.node_type then
+      local hl_group = treesitter.get_highlight_for_type(range.node_type)
+      highlight.apply(minimap_bufnr, M.ns_syntax, hl_group, minimap_line - 1, 0, -1)
     end
   end
 end

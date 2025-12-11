@@ -6,85 +6,20 @@ local M = {}
 -- Check if nvim-treesitter is available
 M.available = false
 
--- Tree-sitter queries for different node types
--- These queries identify structural elements like functions, classes, etc.
+-- Tree-sitter queries for Swift
 M.queries = {
-  -- Swift-specific queries
   swift = [[
     (class_declaration) @class
-    (struct_declaration) @class
-    (protocol_declaration) @class
-    (enum_declaration) @class
+    (struct_declaration) @struct
+    (protocol_declaration) @protocol
+    (enum_declaration) @enum
+    (extension_declaration) @extension
     (function_declaration) @function
-    (init_declaration) @function
-    (deinit_declaration) @function
-    (subscript_declaration) @function
-    (property_declaration) @variable
-  ]],
-
-  -- Lua queries
-  lua = [[
-    (function_declaration) @function
-    (function_definition) @function
-    (assignment_statement) @variable
-    (local_variable_declaration) @variable
-  ]],
-
-  -- TypeScript/JavaScript queries
-  typescript = [[
-    (class_declaration) @class
-    (interface_declaration) @class
-    (function_declaration) @function
-    (method_definition) @function
-    (arrow_function) @function
-    (variable_declarator) @variable
-  ]],
-
-  javascript = [[
-    (class_declaration) @class
-    (function_declaration) @function
-    (method_definition) @function
-    (arrow_function) @function
-    (variable_declarator) @variable
-  ]],
-
-  -- Python queries
-  python = [[
-    (class_definition) @class
-    (function_definition) @function
-    (assignment) @variable
-  ]],
-
-  -- Rust queries
-  rust = [[
-    (struct_item) @class
-    (enum_item) @class
-    (impl_item) @class
-    (trait_item) @class
-    (function_item) @function
-    (let_declaration) @variable
-  ]],
-
-  -- Go queries
-  go = [[
-    (type_declaration) @class
-    (function_declaration) @function
-    (method_declaration) @function
-    (var_declaration) @variable
-  ]],
-
-  -- C/C++ queries
-  c = [[
-    (struct_specifier) @class
-    (function_definition) @function
-    (declaration) @variable
-  ]],
-
-  cpp = [[
-    (class_specifier) @class
-    (struct_specifier) @class
-    (function_definition) @function
-    (declaration) @variable
+    (init_declaration) @init
+    (deinit_declaration) @deinit
+    (subscript_declaration) @subscript
+    (property_declaration) @property
+    (comment) @comment
   ]],
 }
 
@@ -217,9 +152,21 @@ end
 -- @return string: Highlight group name
 function M.get_highlight_for_type(node_type)
   local map = {
+    -- Swift-specific types
     ["class"] = "XmapClass",
+    ["struct"] = "XmapStruct",
+    ["enum"] = "XmapEnum",
+    ["protocol"] = "XmapProtocol",
+    ["extension"] = "XmapExtension",
     ["function"] = "XmapFunction",
+    ["init"] = "XmapInit",
+    ["deinit"] = "XmapInit",
     ["method"] = "XmapMethod",
+    ["property"] = "XmapProperty",
+    ["subscript"] = "XmapFunction",
+    ["mark"] = "XmapMark",
+
+    -- Fallback types
     ["variable"] = "XmapVariable",
     ["comment"] = "XmapComment",
   }
@@ -237,6 +184,86 @@ function M.has_parser(filetype)
 
   local ok = pcall(vim.treesitter.get_string_parser, "", filetype)
   return ok
+end
+
+-- Extract Swift MARK comments from buffer
+-- @param bufnr number: Buffer number
+-- @return table: List of MARK comments with their positions and text
+function M.get_swift_marks(bufnr)
+  if not vim.api.nvim_buf_is_valid(bufnr) then
+    return {}
+  end
+
+  local config = require("xmap.config")
+  local opts = config.get()
+
+  if not opts.swift.show_marks then
+    return {}
+  end
+
+  local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+  local marks = {}
+
+  for line_num, line_text in ipairs(lines) do
+    -- Try each MARK pattern
+    for _, pattern in ipairs(opts.swift.mark_patterns) do
+      local mark_text = line_text:match(pattern)
+      if mark_text then
+        -- Clean up the mark text
+        mark_text = vim.trim(mark_text)
+
+        -- Handle empty marks (just "MARK: -")
+        if mark_text == "" or mark_text == "-" then
+          mark_text = "---"
+        end
+
+        table.insert(marks, {
+          line = line_num,
+          text = mark_text,
+          type = "mark",
+        })
+        break
+      end
+    end
+  end
+
+  return marks
+end
+
+-- Combine structural nodes and MARK comments
+-- @param bufnr number: Buffer number
+-- @param filetype string: Filetype
+-- @return table: Combined list of nodes and marks, sorted by line
+function M.get_swift_structure(bufnr, filetype)
+  if filetype ~= "swift" then
+    return M.get_structural_nodes(bufnr, filetype)
+  end
+
+  -- Get structural nodes
+  local nodes = M.get_structural_nodes(bufnr, filetype)
+
+  -- Get MARK comments
+  local marks = M.get_swift_marks(bufnr)
+
+  -- Convert marks to node-like structures
+  for _, mark in ipairs(marks) do
+    table.insert(nodes, {
+      type = "mark",
+      start_line = mark.line - 1,  -- Convert to 0-indexed
+      start_col = 0,
+      end_line = mark.line - 1,
+      end_col = 0,
+      mark_text = mark.text,
+      node = nil,
+    })
+  end
+
+  -- Sort by line number
+  table.sort(nodes, function(a, b)
+    return a.start_line < b.start_line
+  end)
+
+  return nodes
 end
 
 return M
