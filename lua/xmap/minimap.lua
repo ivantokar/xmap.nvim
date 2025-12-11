@@ -17,6 +17,7 @@ M.state = {
   is_open = false,
   last_update = 0, -- Timestamp of last update
   update_timer = nil, -- Throttle timer
+  line_mapping = {}, -- Maps minimap line to source line range
 }
 
 -- Namespace for highlights
@@ -95,70 +96,113 @@ function M.create_window(bufnr)
   return win
 end
 
--- Render a single line for the minimap
--- @param line string: Original line from main buffer
--- @param line_nr number: Line number (1-indexed)
--- @return string: Rendered line for minimap
-function M.render_line(line, line_nr)
-  local opts = config.get()
-
-  if opts.render.mode == "compact" then
-    -- Compact mode: use blocks to represent code density
-    local trimmed = vim.trim(line)
-    if #trimmed == 0 then
-      return ""
-    end
-
-    -- Calculate density (non-whitespace characters)
-    local density = #trimmed / #line
-    if density > 0.7 then
-      return string.rep("█", opts.width - 2)
-    elseif density > 0.4 then
-      return string.rep("▓", opts.width - 2)
-    elseif density > 0.1 then
-      return string.rep("░", opts.width - 2)
-    else
-      return "·"
-    end
-  else
-    -- Text mode: show truncated actual text
-    local trimmed = vim.trim(line)
-    if #trimmed == 0 then
-      return ""
-    end
-
-    -- Truncate to max length
-    local max_len = opts.render.max_line_length
-    if #trimmed > max_len then
-      return trimmed:sub(1, max_len)
-    else
-      return trimmed
-    end
+-- Calculate code density for a line
+-- @param line string: Line content
+-- @return number: Density value 0-1
+function M.calculate_density(line)
+  local trimmed = vim.trim(line)
+  if #trimmed == 0 then
+    return 0
   end
+
+  -- Count non-whitespace characters
+  local non_ws = trimmed:gsub("%s+", "")
+  return #non_ws / math.max(#line, 1)
 end
 
--- Render entire buffer content for minimap
+-- Render a block representing multiple source lines
+-- @param lines table: Source lines in this block
+-- @param block_info table: Additional info (has functions, etc.)
+-- @return string: Rendered block line
+function M.render_block(lines, block_info)
+  local opts = config.get()
+
+  if #lines == 0 then
+    return string.rep(" ", opts.width - 2)
+  end
+
+  -- Calculate average density for this block
+  local total_density = 0
+  local non_empty = 0
+
+  for _, line in ipairs(lines) do
+    local density = M.calculate_density(line)
+    if density > 0 then
+      total_density = total_density + density
+      non_empty = non_empty + 1
+    end
+  end
+
+  local avg_density = non_empty > 0 and (total_density / non_empty) or 0
+
+  -- Choose block character based on density
+  local char
+  if avg_density > 0.6 then
+    char = "█"
+  elseif avg_density > 0.4 then
+    char = "▓"
+  elseif avg_density > 0.2 then
+    char = "▒"
+  elseif avg_density > 0 then
+    char = "░"
+  else
+    char = " "
+  end
+
+  return string.rep(char, opts.width - 2)
+end
+
+-- Render entire buffer content for minimap with scaling
 -- @param main_bufnr number: Main buffer to render
--- @return table: Lines for minimap
-function M.render_buffer(main_bufnr)
+-- @param minimap_height number: Target height for minimap
+-- @return table: {lines = {}, mapping = {}}
+function M.render_buffer(main_bufnr, minimap_height)
   if not vim.api.nvim_buf_is_valid(main_bufnr) then
-    return {}
+    return { lines = {}, mapping = {} }
   end
 
-  local lines = vim.api.nvim_buf_get_lines(main_bufnr, 0, -1, false)
+  local source_lines = vim.api.nvim_buf_get_lines(main_bufnr, 0, -1, false)
+  local total_source_lines = #source_lines
+
+  if total_source_lines == 0 then
+    return { lines = {}, mapping = {} }
+  end
+
   local rendered = {}
+  local mapping = {}  -- mapping[minimap_line] = {start_line, end_line}
 
-  for i, line in ipairs(lines) do
-    rendered[i] = M.render_line(line, i)
+  -- Calculate how many source lines per minimap line
+  local lines_per_block = math.max(1, math.ceil(total_source_lines / minimap_height))
+
+  local minimap_line = 1
+  local source_idx = 1
+
+  while source_idx <= total_source_lines and minimap_line <= minimap_height do
+    -- Get lines for this block
+    local block_start = source_idx
+    local block_end = math.min(source_idx + lines_per_block - 1, total_source_lines)
+
+    local block_lines = {}
+    for i = block_start, block_end do
+      table.insert(block_lines, source_lines[i])
+    end
+
+    -- Render this block
+    rendered[minimap_line] = M.render_block(block_lines, {})
+    mapping[minimap_line] = { start_line = block_start, end_line = block_end }
+
+    minimap_line = minimap_line + 1
+    source_idx = block_end + 1
   end
 
-  return rendered
+  return { lines = rendered, mapping = mapping }
 end
 
 -- Apply syntax highlighting based on Tree-sitter
 -- @param minimap_bufnr number: Minimap buffer
 -- @param main_bufnr number: Main buffer
-function M.apply_syntax_highlighting(minimap_bufnr, main_bufnr)
+-- @param mapping table: Line mapping
+function M.apply_syntax_highlighting(minimap_bufnr, main_bufnr, mapping)
   if not vim.api.nvim_buf_is_valid(minimap_bufnr) or not vim.api.nvim_buf_is_valid(main_bufnr) then
     return
   end
@@ -176,21 +220,37 @@ function M.apply_syntax_highlighting(minimap_bufnr, main_bufnr)
   -- Get structural nodes from Tree-sitter
   local nodes = treesitter.get_structural_nodes(main_bufnr, filetype)
 
-  -- Apply highlights for each structural node
-  for _, node in ipairs(nodes) do
-    local hl_group = treesitter.get_highlight_for_type(node.type)
-
-    -- Highlight the entire line range for this node
-    for line = node.start_line, node.end_line do
-      highlight.apply(minimap_bufnr, M.ns_syntax, hl_group, line, 0, -1)
+  -- For each minimap line, check if it contains structural nodes
+  for minimap_line, range in pairs(mapping) do
+    for _, node in ipairs(nodes) do
+      -- Check if node overlaps with this block
+      if node.start_line <= range.end_line and node.end_line >= range.start_line then
+        local hl_group = treesitter.get_highlight_for_type(node.type)
+        highlight.apply(minimap_bufnr, M.ns_syntax, hl_group, minimap_line - 1, 0, -1)
+        break -- Only apply one highlight per line
+      end
     end
   end
+end
+
+-- Find minimap line for a given source line
+-- @param source_line number: Source line number (1-indexed)
+-- @param mapping table: Line mapping
+-- @return number|nil: Minimap line or nil
+function M.source_to_minimap_line(source_line, mapping)
+  for minimap_line, range in pairs(mapping) do
+    if source_line >= range.start_line and source_line <= range.end_line then
+      return minimap_line
+    end
+  end
+  return nil
 end
 
 -- Highlight the visible viewport in minimap
 -- @param minimap_bufnr number: Minimap buffer
 -- @param main_winid number: Main window
-function M.highlight_viewport(minimap_bufnr, main_winid)
+-- @param mapping table: Line mapping
+function M.highlight_viewport(minimap_bufnr, main_winid, mapping)
   if not vim.api.nvim_buf_is_valid(minimap_bufnr) or not vim.api.nvim_win_is_valid(main_winid) then
     return
   end
@@ -201,9 +261,37 @@ function M.highlight_viewport(minimap_bufnr, main_winid)
   -- Get visible range in main window
   local range = navigation.get_visible_range(main_winid)
 
-  -- Highlight visible lines in minimap
-  for line = range.start - 1, range["end"] - 1 do
-    highlight.apply(minimap_bufnr, M.ns_viewport, "XmapViewport", line, 0, -1)
+  -- Find corresponding minimap lines
+  local start_minimap = M.source_to_minimap_line(range.start, mapping)
+  local end_minimap = M.source_to_minimap_line(range["end"], mapping)
+
+  if start_minimap and end_minimap then
+    for line = start_minimap - 1, end_minimap - 1 do
+      highlight.apply(minimap_bufnr, M.ns_viewport, "XmapViewport", line, 0, -1)
+    end
+  end
+end
+
+-- Highlight current cursor position in minimap
+-- @param minimap_bufnr number: Minimap buffer
+-- @param main_winid number: Main window
+-- @param mapping table: Line mapping
+function M.highlight_cursor(minimap_bufnr, main_winid, mapping)
+  if not vim.api.nvim_buf_is_valid(minimap_bufnr) or not vim.api.nvim_win_is_valid(main_winid) then
+    return
+  end
+
+  -- Clear previous cursor highlights
+  highlight.clear(minimap_bufnr, M.ns_cursor)
+
+  -- Get current line in main window
+  local main_line = navigation.get_main_cursor_line(main_winid)
+
+  -- Find corresponding minimap line
+  local minimap_line = M.source_to_minimap_line(main_line, mapping)
+
+  if minimap_line then
+    highlight.apply(minimap_bufnr, M.ns_cursor, "XmapCursor", minimap_line - 1, 0, -1)
   end
 end
 
@@ -218,25 +306,35 @@ function M.update()
     return
   end
 
-  -- Render buffer content
-  local rendered_lines = M.render_buffer(M.state.main_bufnr)
+  -- Get minimap window height
+  local minimap_height = 50  -- default
+  if M.state.winid and vim.api.nvim_win_is_valid(M.state.winid) then
+    minimap_height = vim.api.nvim_win_get_height(M.state.winid)
+  end
+
+  -- Render buffer content with scaling
+  local result = M.render_buffer(M.state.main_bufnr, minimap_height)
+  M.state.line_mapping = result.mapping
 
   -- Update minimap buffer
   vim.api.nvim_buf_set_option(M.state.bufnr, "modifiable", true)
-  vim.api.nvim_buf_set_lines(M.state.bufnr, 0, -1, false, rendered_lines)
+  vim.api.nvim_buf_set_lines(M.state.bufnr, 0, -1, false, result.lines)
   vim.api.nvim_buf_set_option(M.state.bufnr, "modifiable", false)
 
   -- Apply syntax highlighting
-  M.apply_syntax_highlighting(M.state.bufnr, M.state.main_bufnr)
+  M.apply_syntax_highlighting(M.state.bufnr, M.state.main_bufnr, M.state.line_mapping)
 
-  -- Highlight viewport
+  -- Highlight viewport and cursor
   if M.state.main_winid and vim.api.nvim_win_is_valid(M.state.main_winid) then
-    M.highlight_viewport(M.state.bufnr, M.state.main_winid)
+    M.highlight_viewport(M.state.bufnr, M.state.main_winid, M.state.line_mapping)
+    M.highlight_cursor(M.state.bufnr, M.state.main_winid, M.state.line_mapping)
 
-    -- Update minimap cursor to follow main buffer
+    -- Update minimap cursor position to match current editor line
     local main_line = navigation.get_main_cursor_line(M.state.main_winid)
-    if M.state.winid and vim.api.nvim_win_is_valid(M.state.winid) then
-      navigation.update_minimap_cursor(M.state.winid, main_line)
+    local minimap_line = M.source_to_minimap_line(main_line, M.state.line_mapping)
+
+    if minimap_line and M.state.winid and vim.api.nvim_win_is_valid(M.state.winid) then
+      pcall(vim.api.nvim_win_set_cursor, M.state.winid, { minimap_line, 0 })
     end
   end
 

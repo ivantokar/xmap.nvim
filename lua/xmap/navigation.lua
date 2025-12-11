@@ -48,7 +48,7 @@ end
 
 -- Show relative line indicator
 -- @param main_line number: Current line in main buffer (1-indexed)
--- @param target_line number: Target line in minimap (1-indexed)
+-- @param target_line number: Target line to jump to (1-indexed)
 function M.show_relative_indicator(main_line, target_line)
   local opts = config.get()
 
@@ -58,14 +58,14 @@ function M.show_relative_indicator(main_line, target_line)
 
   local rel = M.calculate_relative_position(main_line, target_line)
 
-  -- Format message
+  -- Format message with arrow, distance, and actual line number
   local message
   if rel.direction == "current" then
-    message = "Current line"
+    message = string.format("Line %d (current)", target_line)
   elseif rel.direction == "up" then
-    message = string.format("↑ %d lines above", rel.distance)
+    message = string.format("↑ %d lines → line %d", rel.distance, target_line)
   else
-    message = string.format("↓ %d lines below", rel.distance)
+    message = string.format("↓ %d lines → line %d", rel.distance, target_line)
   end
 
   -- Display based on indicator mode
@@ -109,7 +109,8 @@ end
 -- @param minimap_winid number: Minimap window ID
 -- @param main_bufnr number: Main buffer number
 -- @param main_winid number: Main window ID
-function M.jump_to_line(minimap_bufnr, minimap_winid, main_bufnr, main_winid)
+-- @param line_mapping table: Mapping from minimap lines to source line ranges
+function M.jump_to_line(minimap_bufnr, minimap_winid, main_bufnr, main_winid, line_mapping)
   if not vim.api.nvim_win_is_valid(minimap_winid) or not vim.api.nvim_win_is_valid(main_winid) then
     return
   end
@@ -118,9 +119,13 @@ function M.jump_to_line(minimap_bufnr, minimap_winid, main_bufnr, main_winid)
   local cursor = vim.api.nvim_win_get_cursor(minimap_winid)
   local minimap_line = cursor[1]
 
-  -- The minimap line corresponds directly to the main buffer line
-  -- (we render 1:1 in our implementation)
-  local target_line = minimap_line
+  -- Get the source line range for this minimap line
+  local target_line = minimap_line  -- Default fallback
+  if line_mapping and line_mapping[minimap_line] then
+    -- Jump to the middle of the block range
+    local range = line_mapping[minimap_line]
+    target_line = math.floor((range.start_line + range.end_line) / 2)
+  end
 
   -- Get total lines in main buffer
   local main_line_count = vim.api.nvim_buf_line_count(main_bufnr)
@@ -128,7 +133,7 @@ function M.jump_to_line(minimap_bufnr, minimap_winid, main_bufnr, main_winid)
   -- Clamp to valid range
   target_line = math.max(1, math.min(target_line, main_line_count))
 
-  -- Show relative indicator
+  -- Show relative indicator with arrow and line number
   local current_main_line = M.get_main_cursor_line(main_winid)
   M.show_relative_indicator(current_main_line, target_line)
 
@@ -201,10 +206,16 @@ end
 function M.setup_minimap_keymaps(minimap_bufnr, minimap_winid, main_bufnr, main_winid)
   local opts = config.get()
 
+  -- Get line mapping from minimap state
+  local get_line_mapping = function()
+    local minimap = require("xmap.minimap")
+    return minimap.state.line_mapping or {}
+  end
+
   -- Jump to line mapping
   if opts.keymaps.jump then
     vim.keymap.set("n", opts.keymaps.jump, function()
-      M.jump_to_line(minimap_bufnr, minimap_winid, main_bufnr, main_winid)
+      M.jump_to_line(minimap_bufnr, minimap_winid, main_bufnr, main_winid, get_line_mapping())
     end, { buffer = minimap_bufnr, silent = true, desc = "Jump to line" })
   end
 
@@ -215,17 +226,8 @@ function M.setup_minimap_keymaps(minimap_bufnr, minimap_winid, main_bufnr, main_
     end, { buffer = minimap_bufnr, silent = true, desc = "Close minimap" })
   end
 
-  -- Show relative position on cursor move
-  vim.api.nvim_create_autocmd("CursorMoved", {
-    buffer = minimap_bufnr,
-    callback = function()
-      local cursor = vim.api.nvim_win_get_cursor(minimap_winid)
-      local minimap_line = cursor[1]
-      local main_line = M.get_main_cursor_line(main_winid)
-
-      M.show_relative_indicator(main_line, minimap_line)
-    end,
-  })
+  -- Note: Removed CursorMoved autocmd to prevent notification spam
+  -- Relative position indicator now only shows when jumping (pressing Enter)
 end
 
 return M
