@@ -10,15 +10,11 @@ M.available = false
 -- These queries identify structural elements like functions, classes, etc.
 M.queries = {
   -- Swift-specific queries
+  -- Note: Using only confirmed node types from Swift Tree-sitter parser
   swift = [[
     (class_declaration) @class
-    (struct_declaration) @class
-    (protocol_declaration) @class
-    (enum_declaration) @class
     (function_declaration) @function
     (init_declaration) @function
-    (deinit_declaration) @function
-    (subscript_declaration) @function
     (property_declaration) @variable
   ]],
 
@@ -158,6 +154,14 @@ function M.get_structural_nodes(bufnr, filetype)
   -- Parse the query
   local ok, query = pcall(vim.treesitter.query.parse, filetype, query_string)
   if not ok or not query then
+    -- Only show error once
+    if not M._query_error_shown then
+      vim.notify(
+        string.format("xmap.nvim: Failed to parse Tree-sitter query for %s", filetype),
+        vim.log.levels.WARN
+      )
+      M._query_error_shown = true
+    end
     return {}
   end
 
@@ -210,6 +214,21 @@ function M.get_scope_at_line(bufnr, filetype, line)
   end
 
   return current_scope
+end
+
+-- Get icon for node type
+-- @param node_type string: Type of node (from capture)
+-- @return string: Nerd Font icon
+function M.get_icon_for_type(node_type)
+  local map = {
+    ["class"] = "",
+    ["function"] = "",
+    ["method"] = "",
+    ["variable"] = "",
+    ["comment"] = "",
+  }
+
+  return map[node_type] or ""
 end
 
 -- Get highlight group for node type

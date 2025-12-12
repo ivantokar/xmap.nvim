@@ -27,3 +27,7 @@ end, { desc = "Refresh Xmap minimap" })
 vim.api.nvim_create_user_command("XmapFocus", function()
   require("xmap").focus()
 end, { desc = "Focus Xmap minimap" })
+
+vim.api.nvim_create_user_command("XmapDiagnose", function()
+  require("xmap").diagnose()
+end, { desc = "Run Xmap diagnostics" })

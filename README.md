@@ -1,4 +1,4 @@
-# xmap.nvim
+# xmap.nvim (UNDER DEVELOPMENT)
 
 An **Xcode-style minimap** for Neovim with full **keyboard navigation** and **Tree-sitter integration**. Navigate your code with a visual overview that respects your colorscheme.
 
@@ -8,12 +8,13 @@ An **Xcode-style minimap** for Neovim with full **keyboard navigation** and **Tr
 
 - 📍 **Visual Minimap**: Side-by-side overview of your entire buffer
 - ⌨️ **Keyboard-Only Navigation**: No mouse required - navigate with standard Vim motions
-- 🎯 **Relative Jump Indicators**: Shows distance and direction before jumping
-- 🌳 **Tree-sitter Integration**: Smart structural highlighting for functions, classes, and more
+- 🎯 **Smart Jump Indicators**: Colored arrows (🟢 up, 🔴 down) with distance and entity names
+- 🌳 **Tree-sitter Integration**: Smart structural highlighting with Nerd Font icons for functions, classes, and more
 - 🎨 **Colorscheme Aware**: Uses highlight groups - no hard-coded colors
 - ⚡ **Performance Optimized**: Throttled updates and efficient rendering
 - 🔧 **Fully Configurable**: Customize every aspect to fit your workflow
 - 🦾 **Swift-First**: Built with Swift development in mind, works with any language
+- 🔍 **Compact Display**: Smaller font with icons for better space utilization
 
 ## Requirements
 
@@ -125,7 +126,7 @@ require("xmap").setup({
   -- Navigation settings
   navigation = {
     show_relative_line = true,  -- Show jump distance
-    indicator_mode = "notify",  -- "notify", "float", or "virtual"
+    indicator_mode = "float",   -- "notify", "float" (recommended), or "virtual"
     auto_center = true,         -- Center view after jump
   },
 })
@@ -205,9 +206,11 @@ require("xmap").setup({
 
 xmap.nvim uses Tree-sitter to provide structural awareness and highlighting. This means:
 
-- **Functions** are highlighted differently from regular code
-- **Classes/Structs/Enums** stand out visually
+- **Functions** are highlighted differently from regular code with  icon
+- **Classes/Structs/Enums** stand out visually with  icon
+- **Variables** are marked with  icon
 - **Navigate by structure** - easier to see where functions begin/end
+- **Smart indicators** - When navigating, see entity names (e.g., "↑ 15 setupConfig")
 
 ### Supported Languages
 
@@ -266,9 +269,11 @@ xmap.nvim uses the following highlight groups, all linked to existing groups by 
 
 ### Navigation Indicators
 
-- `XmapRelativeUp` - Jump up indicator (→ `DiffDelete`)
-- `XmapRelativeDown` - Jump down indicator (→ `DiffAdd`)
+- `XmapRelativeUp` - Jump up indicator (green arrow: `#a6e3a1`)
+- `XmapRelativeDown` - Jump down indicator (red arrow: `#f38ba8`)
 - `XmapRelativeCurrent` - Current line indicator (→ `DiffText`)
+- `XmapRelativeNumber` - Jump distance number (→ `LineNr`, dimmed)
+- `XmapRelativeEntity` - Entity name display (→ `Comment`)
 
 ### Customizing Highlights
 
@@ -347,16 +352,18 @@ Or resize at runtime:
 require("xmap").update_config({ width = 30 })
 ```
 
-### Relative jump indicators don't show
+### Relative jump indicators don't show or aren't colored
 
 ```lua
 require("xmap").setup({
   navigation = {
     show_relative_line = true,
-    indicator_mode = "notify",  -- Try "float" if "notify" doesn't work
+    indicator_mode = "float",  -- Use "float" for colored arrows and entity names
   },
 })
 ```
+
+**Note**: The "notify" mode shows plain text without colors. Use "float" mode for the best visual experience with green/red arrows and entity names.
 
 ### Minimap doesn't open for my filetype
 

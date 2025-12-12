@@ -46,62 +46,135 @@ function M.calculate_relative_position(from_line, to_line)
   }
 end
 
--- Show relative line indicator
+-- Extract entity name from Swift code line with keyword
+-- @param line_text string: The line of code
+-- @return string|nil, string|nil: Entity name, keyword type
+local function extract_swift_name(line_text)
+  -- Remove leading/trailing whitespace and access modifiers
+  local cleaned = line_text:gsub("^%s*", ""):gsub("^public%s+", ""):gsub("^private%s+", ""):gsub("^internal%s+", "")
+
+  -- Swift function: func name( or func name<T>(
+  local name = cleaned:match("^func%s+([%w_]+)")
+  if name then return name, "func" end
+
+  -- Swift init
+  if cleaned:match("^init%s*%(") or cleaned:match("^init%s*<") then
+    return "init", "func"
+  end
+
+  -- Swift deinit
+  if cleaned:match("^deinit%s*{") then
+    return "deinit", "func"
+  end
+
+  -- Class/Struct/Enum/Protocol: class Name, struct Name, etc.
+  name = cleaned:match("^class%s+([%w_]+)")
+  if name then return name, "class" end
+
+  name = cleaned:match("^struct%s+([%w_]+)")
+  if name then return name, "struct" end
+
+  name = cleaned:match("^enum%s+([%w_]+)")
+  if name then return name, "enum" end
+
+  name = cleaned:match("^protocol%s+([%w_]+)")
+  if name then return name, "protocol" end
+
+  -- Properties: let name: or var name:
+  name = cleaned:match("^let%s+([%w_]+)%s*:")
+  if name then return name, "let" end
+
+  name = cleaned:match("^var%s+([%w_]+)%s*:")
+  if name then return name, "var" end
+
+  return nil, nil
+end
+
+-- Get entity name at line (function/class name) with keyword
+-- @param bufnr number: Buffer number
+-- @param line number: Line number (1-indexed)
+-- @return string|nil, string|nil: Full declaration (keyword + name), keyword type
+function M.get_entity_at_line(bufnr, line)
+  if not vim.api.nvim_buf_is_valid(bufnr) then
+    return nil, nil
+  end
+
+  -- Only process Swift files
+  local filetype = vim.api.nvim_buf_get_option(bufnr, "filetype")
+  if filetype ~= "swift" then
+    return nil, nil
+  end
+
+  local treesitter = require("xmap.treesitter")
+  local nodes = treesitter.get_structural_nodes(bufnr, filetype)
+
+  -- Find the node at this line
+  for _, node in ipairs(nodes) do
+    if node.start_line + 1 == line then
+      -- Get the actual line text
+      local lines = vim.api.nvim_buf_get_lines(bufnr, node.start_line, node.start_line + 1, false)
+      if #lines > 0 then
+        local name, keyword = extract_swift_name(lines[1])
+        if name and keyword then
+          -- Return "func name", "class name", "let name", etc.
+          return keyword .. " " .. name, keyword
+        end
+      end
+    end
+  end
+
+  return nil, nil
+end
+
+-- Namespace for relative indicator
+M.ns_relative = vim.api.nvim_create_namespace("xmap_relative_indicator")
+
+-- Show relative line indicator as virtual text in minimap
+-- @param minimap_bufnr number: Minimap buffer
+-- @param minimap_line number: Line in minimap (1-indexed)
 -- @param main_line number: Current line in main buffer (1-indexed)
 -- @param target_line number: Target line in minimap (1-indexed)
-function M.show_relative_indicator(main_line, target_line)
+-- @param main_bufnr number: Main buffer number (for entity detection)
+function M.show_relative_indicator(minimap_bufnr, minimap_line, main_line, target_line, main_bufnr)
   local opts = config.get()
 
   if not opts.navigation.show_relative_line then
     return
   end
 
+  if not vim.api.nvim_buf_is_valid(minimap_bufnr) then
+    return
+  end
+
+  -- Clear previous indicators
+  vim.api.nvim_buf_clear_namespace(minimap_bufnr, M.ns_relative, 0, -1)
+
   local rel = M.calculate_relative_position(main_line, target_line)
 
-  -- Format message
-  local message
+  -- Build virtual text chunks with highlights
+  local virt_text = {}
+
   if rel.direction == "current" then
-    message = "Current line"
+    -- Just show the line normally, maybe with a subtle indicator
+    return
   elseif rel.direction == "up" then
-    message = string.format("↑ %d lines above", rel.distance)
-  else
-    message = string.format("↓ %d lines below", rel.distance)
+    -- Green arrow
+    table.insert(virt_text, { "↑ ", "XmapRelativeUp" })
+    -- Dimmed number
+    table.insert(virt_text, { tostring(rel.distance) .. " ", "XmapRelativeNumber" })
+  else -- down
+    -- Red arrow
+    table.insert(virt_text, { "↓ ", "XmapRelativeDown" })
+    -- Dimmed number
+    table.insert(virt_text, { tostring(rel.distance) .. " ", "XmapRelativeNumber" })
   end
 
-  -- Display based on indicator mode
-  if opts.navigation.indicator_mode == "notify" then
-    vim.notify(message, vim.log.levels.INFO)
-  elseif opts.navigation.indicator_mode == "float" then
-    -- Create a small floating window
-    local buf = vim.api.nvim_create_buf(false, true)
-    vim.api.nvim_buf_set_lines(buf, 0, -1, false, { message })
-
-    local width = #message + 2
-    local height = 1
-
-    local win_opts = {
-      relative = "cursor",
-      row = 1,
-      col = 0,
-      width = width,
-      height = height,
-      style = "minimal",
-      border = "rounded",
-    }
-
-    local win = vim.api.nvim_open_win(buf, false, win_opts)
-
-    -- Auto-close after a short delay
-    vim.defer_fn(function()
-      if vim.api.nvim_win_is_valid(win) then
-        vim.api.nvim_win_close(win, true)
-      end
-      if vim.api.nvim_buf_is_valid(buf) then
-        vim.api.nvim_buf_delete(buf, { force = true })
-      end
-    end, 1500)
-  end
-  -- "virtual" mode would be implemented in minimap.lua with virtual text
+  -- Add virtual text to the current line in minimap
+  pcall(vim.api.nvim_buf_set_extmark, minimap_bufnr, M.ns_relative, minimap_line - 1, 0, {
+    virt_text = virt_text,
+    virt_text_pos = "eol", -- End of line
+    hl_mode = "combine",
+  })
 end
 
 -- Jump from minimap to main buffer
@@ -118,19 +191,18 @@ function M.jump_to_line(minimap_bufnr, minimap_winid, main_bufnr, main_winid)
   local cursor = vim.api.nvim_win_get_cursor(minimap_winid)
   local minimap_line = cursor[1]
 
-  -- The minimap line corresponds directly to the main buffer line
-  -- (we render 1:1 in our implementation)
-  local target_line = minimap_line
+  -- Get line mapping from minimap state
+  local minimap = require("xmap.minimap")
+  local line_mapping = minimap.state.line_mapping
+
+  -- Map minimap line to actual source line
+  local target_line = line_mapping[minimap_line] or minimap_line
 
   -- Get total lines in main buffer
   local main_line_count = vim.api.nvim_buf_line_count(main_bufnr)
 
   -- Clamp to valid range
   target_line = math.max(1, math.min(target_line, main_line_count))
-
-  -- Show relative indicator
-  local current_main_line = M.get_main_cursor_line(main_winid)
-  M.show_relative_indicator(current_main_line, target_line)
 
   -- Jump to the line in main buffer
   vim.api.nvim_win_set_cursor(main_winid, { target_line, 0 })
@@ -215,17 +287,32 @@ function M.setup_minimap_keymaps(minimap_bufnr, minimap_winid, main_bufnr, main_
     end, { buffer = minimap_bufnr, silent = true, desc = "Close minimap" })
   end
 
-  -- Show relative position on cursor move
-  vim.api.nvim_create_autocmd("CursorMoved", {
-    buffer = minimap_bufnr,
-    callback = function()
-      local cursor = vim.api.nvim_win_get_cursor(minimap_winid)
-      local minimap_line = cursor[1]
-      local main_line = M.get_main_cursor_line(main_winid)
+  -- Show relative indicators when navigating in minimap
+  if opts.navigation.show_relative_line then
+    vim.api.nvim_create_autocmd("CursorMoved", {
+      buffer = minimap_bufnr,
+      callback = function()
+        local minimap_cursor = vim.api.nvim_win_get_cursor(minimap_winid)
+        local minimap_line = minimap_cursor[1]
+        local main_cursor = vim.api.nvim_win_get_cursor(main_winid)
+        local main_line = main_cursor[1]
 
-      M.show_relative_indicator(main_line, minimap_line)
-    end,
-  })
+        -- Get the target line from line mapping
+        local minimap = require("xmap.minimap")
+        local target_line = minimap.state.line_mapping[minimap_line] or minimap_line
+
+        M.show_relative_indicator(minimap_bufnr, minimap_line, main_line, target_line, main_bufnr)
+      end,
+    })
+
+    -- Clear indicators when leaving minimap window
+    vim.api.nvim_create_autocmd("WinLeave", {
+      buffer = minimap_bufnr,
+      callback = function()
+        vim.api.nvim_buf_clear_namespace(minimap_bufnr, M.ns_relative, 0, -1)
+      end,
+    })
+  end
 end
 
 return M

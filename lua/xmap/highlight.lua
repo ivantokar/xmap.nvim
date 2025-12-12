@@ -8,25 +8,25 @@ M.groups = {
   -- Minimap window background
   XmapBackground = { link = "Normal" },
 
-  -- Normal text in minimap
-  XmapText = { link = "Comment" },
+  -- Normal text in minimap (slightly dimmed)
+  XmapText = { fg = "#9399b2" },
 
   -- Line numbers in minimap (if enabled)
   XmapLineNr = { link = "LineNr" },
 
   -- Current viewport region (visible area in main buffer)
-  XmapViewport = { link = "Visual" },
+  XmapViewport = { bg = "#313244" },
 
   -- Cursor/selection in minimap
   XmapCursor = { link = "CursorLine" },
 
-  -- Tree-sitter scope highlights
-  XmapFunction = { link = "Function" },
-  XmapClass = { link = "Type" },
-  XmapMethod = { link = "Function" },
-  XmapVariable = { link = "Identifier" },
+  -- Tree-sitter scope highlights (will inherit from colorscheme or use fallback)
+  XmapFunction = { link = "@function" },
+  XmapClass = { link = "@type" },
+  XmapMethod = { link = "@method" },
+  XmapVariable = { link = "@variable" },
+  XmapSwiftKeyword = { link = "@keyword" },
   XmapComment = { link = "Comment" },
-  XmapKeyword = { link = "Keyword" },
   XmapString = { link = "String" },
   XmapNumber = { link = "Number" },
 
@@ -34,25 +34,65 @@ M.groups = {
   XmapScope = { link = "Title" },
   XmapBorder = { link = "FloatBorder" },
 
-  -- Relative jump indicator
-  XmapRelativeUp = { link = "DiffDelete" },
-  XmapRelativeDown = { link = "DiffAdd" },
-  XmapRelativeCurrent = { link = "DiffText" },
+  -- Relative line numbers and arrows (explicit fg to ensure contrast in all themes)
+  XmapRelativeUp = { fg = "#9ece6a", bold = true },
+  XmapRelativeDown = { fg = "#f7768e", bold = true },
+  XmapRelativeCurrent = { fg = "#e0af68", bold = true },
+  XmapRelativeNumber = { link = "LineNr" }, -- Dimmed numbers from colorscheme
+  XmapRelativeKeyword = { fg = "#bb9af7", bold = true },
+  XmapRelativeEntity = { fg = "#7dcfff" },
+
+  -- Comment markers
+  XmapCommentNormal = { link = "Comment" }, -- Regular comments
+  XmapCommentDoc = { link = "SpecialComment" }, -- Doc comments (///)
+  XmapCommentBold = { bold = true }, -- Bold text for marker descriptions
+  XmapCommentMark = { link = "SpecialComment", bold = true }, -- MARK: marker
+  XmapCommentTodo = { link = "Todo", bold = true }, -- TODO: marker
+  XmapCommentFixme = { link = "Error", bold = true }, -- FIXME: marker
+  XmapCommentNote = { link = "SpecialComment", bold = true }, -- NOTE: marker
+  XmapCommentWarning = { link = "WarningMsg", bold = true }, -- WARNING: marker
+  XmapCommentBug = { link = "ErrorMsg", bold = true }, -- BUG: marker
+}
+
+-- Fallback colors (used if colorscheme doesn't provide them)
+local fallback_colors = {
+  XmapFunction = { fg = "#7aa2f7", bold = true }, -- Blue
+  XmapClass = { fg = "#bb9af7", bold = true }, -- Purple
+  XmapVariable = { fg = "#9ece6a" }, -- Green
+  XmapSwiftKeyword = { fg = "#bb9af7" }, -- Purple
+  -- Explicit arrow colors for reliable up/down contrast
+  XmapRelativeUp = { fg = "#9ece6a", bold = true }, -- Green
+  XmapRelativeDown = { fg = "#f7768e", bold = true }, -- Red
+  XmapRelativeCurrent = { fg = "#e0af68", bold = true }, -- Yellow
+  XmapRelativeNumber = { fg = "#565f89" }, -- Dimmed gray
+  XmapRelativeKeyword = { fg = "#bb9af7", bold = true }, -- Purple (keywords)
+  XmapRelativeEntity = { fg = "#7dcfff" }, -- Cyan (entity names)
 }
 
 -- Setup highlight groups
 function M.setup()
   for group_name, group_def in pairs(M.groups) do
-    -- Check if highlight group already exists
-    local exists = vim.fn.hlexists(group_name) == 1
+    if group_def.link then
+      -- Get the actual colors from the linked group
+      local link_name = group_def.link
+      local link_hl = vim.api.nvim_get_hl(0, { name = link_name, link = false })
 
-    if not exists then
-      -- Create the highlight group
-      if group_def.link then
-        vim.api.nvim_set_hl(0, group_name, { link = group_def.link, default = true })
+      if link_hl and link_hl.fg then
+        -- Copy the actual colors instead of just linking
+        local new_hl = vim.tbl_extend("force", link_hl, {})
+        -- Preserve any additional attributes from group_def
+        if group_def.bold then new_hl.bold = true end
+        if group_def.italic then new_hl.italic = true end
+        vim.api.nvim_set_hl(0, group_name, new_hl)
+      elseif fallback_colors[group_name] then
+        -- Use fallback color if linked group has no fg color
+        vim.api.nvim_set_hl(0, group_name, fallback_colors[group_name])
       else
-        vim.api.nvim_set_hl(0, group_name, vim.tbl_extend("force", group_def, { default = true }))
+        -- Last resort: just link
+        vim.api.nvim_set_hl(0, group_name, { link = group_def.link })
       end
+    else
+      vim.api.nvim_set_hl(0, group_name, group_def)
     end
   end
 end
