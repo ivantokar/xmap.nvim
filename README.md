@@ -126,8 +126,8 @@ require("xmap").setup({
   -- Navigation settings
   navigation = {
     show_relative_line = true,  -- Show jump distance
-    indicator_mode = "float",   -- "notify", "float" (recommended), or "virtual"
     auto_center = true,         -- Center view after jump
+    follow_cursor = true,       -- Center editor while navigating minimap
   },
 })
 ```
@@ -196,9 +196,6 @@ require("xmap").setup({
   render = {
     mode = "compact",  -- Use blocks instead of text
   },
-  navigation = {
-    indicator_mode = "float",  -- Floating window for indicators
-  },
 })
 ```
 
@@ -262,18 +259,19 @@ xmap.nvim uses the following highlight groups, all linked to existing groups by 
 - `XmapMethod` - Methods (→ `Function`)
 - `XmapVariable` - Variables (→ `Identifier`)
 - `XmapComment` - Comments (→ `Comment`)
-- `XmapKeyword` - Keywords (→ `Keyword`)
+- `XmapSwiftKeyword` - Keywords (→ `Keyword`)
 - `XmapString` - Strings (→ `String`)
 - `XmapNumber` - Numbers (→ `Number`)
 - `XmapScope` - Scope indicators (→ `Title`)
 
 ### Navigation Indicators
 
-- `XmapRelativeUp` - Jump up indicator (green arrow: `#a6e3a1`)
-- `XmapRelativeDown` - Jump down indicator (red arrow: `#f38ba8`)
-- `XmapRelativeCurrent` - Current line indicator (→ `DiffText`)
+- `XmapRelativeUp` - Jump up indicator (→ `DiagnosticOk`)
+- `XmapRelativeDown` - Jump down indicator (→ `DiagnosticError`)
+- `XmapRelativeCurrent` - Current line indicator (→ `DiagnosticWarn`)
 - `XmapRelativeNumber` - Jump distance number (→ `LineNr`, dimmed)
-- `XmapRelativeEntity` - Entity name display (→ `Comment`)
+- `XmapRelativeKeyword` - Keyword highlight (→ `Keyword`)
+- `XmapRelativeEntity` - Entity name display (→ `Identifier`)
 
 ### Customizing Highlights
 
@@ -358,12 +356,11 @@ require("xmap").update_config({ width = 30 })
 require("xmap").setup({
   navigation = {
     show_relative_line = true,
-    indicator_mode = "float",  -- Use "float" for colored arrows and entity names
   },
 })
 ```
 
-**Note**: The "notify" mode shows plain text without colors. Use "float" mode for the best visual experience with green/red arrows and entity names.
+If you still don't see colored arrows/numbers, ensure your colorscheme isn't clearing these highlight groups: `XmapRelativeUp`, `XmapRelativeDown`, `XmapRelativeCurrent`, `XmapRelativeNumber`.
 
 ### Minimap doesn't open for my filetype
 

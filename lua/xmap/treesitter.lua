@@ -221,11 +221,11 @@ end
 -- @return string: Nerd Font icon
 function M.get_icon_for_type(node_type)
   local map = {
-    ["class"] = "",
-    ["function"] = "",
-    ["method"] = "",
-    ["variable"] = "",
-    ["comment"] = "",
+    ["class"] = "󰠱",
+    ["function"] = "󰊕",
+    ["method"] = "󰆧",
+    ["variable"] = "󰀫",
+    ["comment"] = "󰆈",
   }
 
   return map[node_type] or ""

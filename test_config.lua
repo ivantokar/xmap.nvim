@@ -17,7 +17,6 @@ require("xmap").setup({
 
   navigation = {
     show_relative_line = true,
-    indicator_mode = "float",  -- Test the new colored indicators
     auto_center = true,
   },
 })

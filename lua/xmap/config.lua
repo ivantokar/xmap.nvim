@@ -77,6 +77,9 @@ M.defaults = {
 
 		-- Auto-center main window when jumping
 		auto_center = true,
+
+		-- While the minimap is focused, keep the main editor cursor centered on the minimap selection.
+		follow_cursor = true,
 	},
 }
 

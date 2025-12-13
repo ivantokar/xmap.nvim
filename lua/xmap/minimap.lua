@@ -8,6 +8,27 @@ local navigation = require("xmap.navigation")
 
 local M = {}
 
+local MAX_RELATIVE_DISTANCE = 999
+local RELATIVE_PREFIX_TEMPLATE = string.format("%s%3d ", "→", 0)
+local RELATIVE_PREFIX_LEN = #RELATIVE_PREFIX_TEMPLATE
+
+local function format_relative_prefix(source_line, current_line)
+  local delta = source_line - current_line
+  local arrow = "→"
+  if delta < 0 then
+    arrow = "↑"
+  elseif delta > 0 then
+    arrow = "↓"
+  end
+
+  local distance = math.abs(delta)
+  if distance > MAX_RELATIVE_DISTANCE then
+    distance = MAX_RELATIVE_DISTANCE
+  end
+
+  return arrow, string.format("%s%3d ", arrow, distance)
+end
+
 -- Minimap state
 M.state = {
   bufnr = nil, -- Minimap buffer number
@@ -17,8 +38,22 @@ M.state = {
   is_open = false,
   last_update = 0, -- Timestamp of last update
   update_timer = nil, -- Throttle timer
+  last_relative_update = 0, -- Timestamp of last cursor-only update
+  relative_timer = nil, -- Throttle timer for cursor-only updates
   line_mapping = {}, -- Maps minimap line numbers to source line numbers
+  navigation_anchor_line = nil, -- Base line for relative distances while minimap is focused
 }
+
+local function get_relative_base_line(main_winid)
+  local current_line = navigation.get_main_cursor_line(main_winid)
+  if not (M.state.navigation_anchor_line and M.state.winid and vim.api.nvim_win_is_valid(M.state.winid)) then
+    return current_line
+  end
+  if vim.api.nvim_get_current_win() ~= M.state.winid then
+    return current_line
+  end
+  return M.state.navigation_anchor_line
+end
 
 -- Namespace for highlights
 M.ns_viewport = highlight.create_namespace("viewport")
@@ -60,18 +95,6 @@ end
 function M.create_window(bufnr)
   local opts = config.get()
 
-  -- Calculate window position
-  local win_opts = {
-    relative = "editor",
-    width = opts.width,
-    height = vim.o.lines - 2, -- Full height minus command line
-    row = 0,
-    col = opts.side == "right" and (vim.o.columns - opts.width) or 0,
-    style = "minimal",
-    border = "none",
-    focusable = true,
-  }
-
   -- Create split window instead of floating for better integration
   -- Save current window
   local current_win = vim.api.nvim_get_current_win()
@@ -94,12 +117,17 @@ function M.create_window(bufnr)
   -- Set window options
   vim.api.nvim_win_set_option(win, "number", false)
   vim.api.nvim_win_set_option(win, "relativenumber", false)
-  vim.api.nvim_win_set_option(win, "cursorline", true)
+  vim.api.nvim_win_set_option(win, "cursorline", false)
   vim.api.nvim_win_set_option(win, "wrap", false)
   vim.api.nvim_win_set_option(win, "signcolumn", "no")
   vim.api.nvim_win_set_option(win, "foldcolumn", "0")
   vim.api.nvim_win_set_option(win, "winfixwidth", true)
   vim.api.nvim_win_set_option(win, "fillchars", "eob: ") -- Remove ~ for empty lines
+  vim.api.nvim_win_set_option(
+    win,
+    "winhighlight",
+    "Normal:XmapBackground,NormalNC:XmapBackground,EndOfBuffer:XmapBackground,SignColumn:XmapBackground,FoldColumn:XmapBackground"
+  )
 
   -- Return to original window
   vim.api.nvim_set_current_win(current_win)
@@ -146,22 +174,37 @@ end
 -- @param line_nr number: Line number (1-indexed)
 -- @return boolean: True if this is part of file header
 local function is_file_header(lines, line_nr)
-  -- File header is at the top, typically first 10 lines
-  if line_nr > 15 then
+  if line_nr > 50 then
     return false
   end
 
-  -- Check if this line and surrounding lines are comments
-  local comment_count = 0
-  for i = 1, math.min(15, #lines) do
-    local l = vim.trim(lines[i])
-    if l:match("^//") or l:match("^/%*") or l:match("^%*") then
-      comment_count = comment_count + 1
-    end
+  local function is_comment_line(trimmed)
+    return trimmed:match("^//") or trimmed:match("^/%*") or trimmed:match("^%*") or trimmed:match("^%-%-") or trimmed:match("^#")
   end
 
-  -- If many consecutive comments at top, it's likely a file header
-  return comment_count >= 3 and line_nr <= comment_count
+  local header_end = 0
+  local comment_count = 0
+
+  for i = 1, math.min(50, #lines) do
+    local trimmed = vim.trim(lines[i])
+
+    if trimmed == "" then
+      header_end = i
+      goto continue
+    end
+
+    if not is_comment_line(trimmed) then
+      break
+    end
+
+    comment_count = comment_count + 1
+    header_end = i
+
+    ::continue::
+  end
+
+  -- Treat as file header only if there's a real comment block at the top.
+  return comment_count >= 3 and line_nr <= header_end
 end
 
 -- Extract comment text (remove markers, get first line only)
@@ -171,11 +214,15 @@ local function extract_comment(line)
   local trimmed = vim.trim(line)
 
   -- Check if this is a doc comment (///)
-  local is_doc_comment = trimmed:match("^///")
+  local is_doc_comment = trimmed:match("^///") or trimmed:match("^//!") or trimmed:match("^%-%-%-") or trimmed:match("^/%*%*")
 
   -- Remove comment markers
   local text = trimmed:gsub("^///%s*", "")  -- /// doc comments
+    :gsub("^//!%s*", "")  -- //! doc comments (Rust)
     :gsub("^//%s*", "")  -- // comments
+    :gsub("^%-%-%-%s*", "")  -- --- doc comments (Lua)
+    :gsub("^%-%-%s*", "")  -- -- comments (Lua)
+    :gsub("^#%s*", "")  -- # comments (Python)
     :gsub("^/%*%s*", "")  -- /* comments
     :gsub("^%*%s*", "")   -- * continuation
     :gsub("%s*%*/$", "")  -- */ end
@@ -214,6 +261,51 @@ local function extract_comment(line)
   return text, marker, is_doc_comment
 end
 
+local function extract_swift_entity(line_text)
+  -- Remove leading whitespace and access modifiers
+  local cleaned = line_text
+    :gsub("^%s*", "")
+    :gsub("^public%s+", "")
+    :gsub("^private%s+", "")
+    :gsub("^internal%s+", "")
+
+  -- Swift function: func name( or func name<T>(
+  local name = cleaned:match("^func%s+([%w_]+)")
+  if name then return "func " .. name end
+
+  -- Swift init
+  if cleaned:match("^init%s*%(") or cleaned:match("^init%s*<") then
+    return "func init"
+  end
+
+  -- Swift deinit
+  if cleaned:match("^deinit%s*{") then
+    return "func deinit"
+  end
+
+  -- Class/Struct/Enum/Protocol: class Name, struct Name, etc.
+  name = cleaned:match("^class%s+([%w_]+)")
+  if name then return "class " .. name end
+
+  name = cleaned:match("^struct%s+([%w_]+)")
+  if name then return "struct " .. name end
+
+  name = cleaned:match("^enum%s+([%w_]+)")
+  if name then return "enum " .. name end
+
+  name = cleaned:match("^protocol%s+([%w_]+)")
+  if name then return "protocol " .. name end
+
+  -- Properties: let name: or var name:
+  name = cleaned:match("^let%s+([%w_]+)%s*:")
+  if name then return "let " .. name end
+
+  name = cleaned:match("^var%s+([%w_]+)%s*:")
+  if name then return "var " .. name end
+
+  return nil
+end
+
 -- Render a single line for the minimap (structural overview only)
 -- @param line string: Original line from main buffer
 -- @param line_nr number: Line number (1-indexed)
@@ -226,24 +318,43 @@ function M.render_line(line, line_nr, main_bufnr, current_line, all_lines, nodes
   local filetype = vim.api.nvim_buf_get_option(main_bufnr, "filetype")
   local opts = config.get()
 
-  -- Calculate relative position
-  local distance = line_nr - current_line
-  local arrow = ""
-
-  if distance < 0 then
-    arrow = "↑"
-    distance = math.abs(distance)
-  elseif distance > 0 then
-    arrow = "↓"
-  else
-    arrow = "→"
-    distance = 0
-  end
-
-  -- Format: arrow + number (3 digits) + space
-  local prefix = string.format("%s%3d ", arrow, distance)
+  local _, prefix = format_relative_prefix(line_nr, current_line)
 
   local trimmed = vim.trim(line)
+
+  -- Include only marker comments (MARK/TODO/FIXME/...) in the minimap.
+  if trimmed:match("^//") or trimmed:match("^/%*") or trimmed:match("^%*") or trimmed:match("^%-%-") or trimmed:match("^#") then
+    local text, marker, is_doc_comment = extract_comment(line)
+    if marker then
+      return prefix .. "⚑ " .. marker .. ": " .. (text or "")
+    end
+
+    if text and not is_file_header(all_lines, line_nr) then
+      local comment_icon = "󰆈"
+      local comment_prefix = "//"
+      if trimmed:match("^//!") then
+        comment_prefix = "//!"
+      elseif trimmed:match("^/%*%*") then
+        comment_prefix = "/**"
+      elseif trimmed:match("^/%*") then
+        comment_prefix = "/*"
+      elseif trimmed:match("^%*") then
+        comment_prefix = "*"
+      elseif is_doc_comment then
+        comment_prefix = "///"
+      end
+
+      if trimmed:match("^%-%-") then
+        comment_prefix = is_doc_comment and "---" or "--"
+      elseif trimmed:match("^#") then
+        comment_prefix = "#"
+      end
+
+      return prefix .. comment_icon .. " " .. comment_prefix .. " " .. text
+    end
+
+    return nil
+  end
 
   -- Check if this is a structural element (function/class/etc)
   local icon = M.get_line_icon(main_bufnr, line_nr, nodes_by_line)
@@ -262,21 +373,18 @@ function M.render_line(line, line_nr, main_bufnr, current_line, all_lines, nodes
   end
 
   if icon then
-    -- This is a function/class/struct - show it with entity name
-    local navigation = require("xmap.navigation")
-    local entity, keyword = navigation.get_entity_at_line(main_bufnr, line_nr)
-
-    if entity or structural_text then
-      return prefix .. icon .. " " .. (entity or structural_text)
-    else
-      -- Fallback: show trimmed line
-      local compact = trimmed:gsub("%s+", " ")
-      local max_len = opts.render.max_line_length or 40
-      if #compact > max_len then
-        compact = compact:sub(1, max_len - 3) .. "..."
-      end
-      return prefix .. icon .. " " .. compact
+    local entity = structural_text
+    if not entity and filetype == "swift" then
+      entity = extract_swift_entity(trimmed)
     end
+
+    local compact = (entity or trimmed):gsub("%s+", " ")
+    local max_len = opts.render.max_line_length or 40
+    if #compact > max_len then
+      compact = compact:sub(1, max_len - 3) .. "..."
+    end
+
+    return prefix .. icon .. " " .. compact
   end
 
   -- If we have structural data, hide non-structural lines to keep the minimap focused
@@ -306,26 +414,27 @@ end
 -- Render entire buffer content for minimap
 -- @param main_bufnr number: Main buffer to render
 -- @param main_winid number: Main window (to get current line)
+-- @param current_line_override number|nil: Optional base line override
 -- @return table, table: Lines for minimap, line number mapping
-function M.render_buffer(main_bufnr, main_winid)
+function M.render_buffer(main_bufnr, main_winid, current_line_override)
   if not vim.api.nvim_buf_is_valid(main_bufnr) then
-    return {}, {}
+    return {}, {}, {}
   end
 
   -- Get current line in main buffer
-  local navigation = require("xmap.navigation")
-  local current_line = navigation.get_main_cursor_line(main_winid)
+  local current_line = current_line_override or navigation.get_main_cursor_line(main_winid)
 
   local lines = vim.api.nvim_buf_get_lines(main_bufnr, 0, -1, false)
   local rendered = {}
   local line_mapping = {}  -- Maps minimap line number to source line number
   local nodes_by_line = {}
+  local structural_nodes = {}
 
   -- Build structural lookup once per render
   local filetype = vim.api.nvim_buf_get_option(main_bufnr, "filetype")
   if config.is_treesitter_enabled(filetype) then
-    local nodes = treesitter.get_structural_nodes(main_bufnr, filetype)
-    for _, node in ipairs(nodes) do
+    structural_nodes = treesitter.get_structural_nodes(main_bufnr, filetype)
+    for _, node in ipairs(structural_nodes) do
       nodes_by_line[node.start_line + 1] = node.type
     end
   end
@@ -338,14 +447,15 @@ function M.render_buffer(main_bufnr, main_winid)
     end
   end
 
-  return rendered, line_mapping
+  return rendered, line_mapping, structural_nodes
 end
 
 -- Apply highlighting for relative numbers, arrows, icons, and comments
 -- @param minimap_bufnr number: Minimap buffer
 -- @param main_bufnr number: Main buffer
 -- @param main_winid number: Main window
-function M.apply_relative_number_highlighting(minimap_bufnr, main_bufnr, main_winid)
+-- @param current_line_override number|nil: Optional base line override
+function M.apply_relative_number_highlighting(minimap_bufnr, main_bufnr, main_winid, current_line_override)
   if not vim.api.nvim_buf_is_valid(minimap_bufnr) or not vim.api.nvim_buf_is_valid(main_bufnr) then
     return
   end
@@ -354,8 +464,7 @@ function M.apply_relative_number_highlighting(minimap_bufnr, main_bufnr, main_wi
   highlight.clear(minimap_bufnr, M.ns_syntax)
 
   -- Get current line
-  local navigation = require("xmap.navigation")
-  local current_line = navigation.get_main_cursor_line(main_winid)
+  local current_line = current_line_override or navigation.get_main_cursor_line(main_winid)
 
   -- Get minimap lines
   local minimap_lines = vim.api.nvim_buf_get_lines(minimap_bufnr, 0, -1, false)
@@ -371,19 +480,21 @@ function M.apply_relative_number_highlighting(minimap_bufnr, main_bufnr, main_wi
     end
 
     local distance = source_line_nr - current_line
+    local arrow, prefix = format_relative_prefix(source_line_nr, current_line)
+    local arrow_end = #arrow
+    local prefix_end = #prefix
 
-    -- Highlight arrow (position 0)
+    -- Highlight arrow (byte range for the UTF-8 arrow)
     if distance < 0 then
-      highlight.apply(minimap_bufnr, M.ns_syntax, "XmapRelativeUp", minimap_line_nr - 1, 0, 1)
+      highlight.apply(minimap_bufnr, M.ns_syntax, "XmapRelativeUp", minimap_line_nr - 1, 0, arrow_end)
     elseif distance > 0 then
-      highlight.apply(minimap_bufnr, M.ns_syntax, "XmapRelativeDown", minimap_line_nr - 1, 0, 1)
+      highlight.apply(minimap_bufnr, M.ns_syntax, "XmapRelativeDown", minimap_line_nr - 1, 0, arrow_end)
     else
-      highlight.apply(minimap_bufnr, M.ns_syntax, "XmapRelativeCurrent", minimap_line_nr - 1, 0, 1)
+      highlight.apply(minimap_bufnr, M.ns_syntax, "XmapRelativeCurrent", minimap_line_nr - 1, 0, arrow_end)
     end
 
-    -- Highlight number (after arrow, includes space before content)
-    -- Format is: "↑  0 " or "↑ 42 " - positions 1-5 cover the number and trailing space
-    highlight.apply(minimap_bufnr, M.ns_syntax, "XmapRelativeNumber", minimap_line_nr - 1, 1, 5)
+    -- Highlight number + trailing space (byte indices)
+    highlight.apply(minimap_bufnr, M.ns_syntax, "XmapRelativeNumber", minimap_line_nr - 1, arrow_end, prefix_end)
 
     -- Check for special comment markers (only highlight icon + marker name, leave text bold)
     if line_text:match("⚑ MARK:") then
@@ -429,19 +540,20 @@ function M.apply_relative_number_highlighting(minimap_bufnr, main_bufnr, main_wi
         highlight.apply(minimap_bufnr, M.ns_syntax, "XmapCommentBug", minimap_line_nr - 1, icon_pos - 1, marker_end)
         highlight.apply(minimap_bufnr, M.ns_syntax, "XmapCommentBold", minimap_line_nr - 1, marker_end + 1, -1)
       end
-    elseif line_text:match("^.%s*%d+ ///") then
-      -- Doc comment
-      local start_pos = line_text:find("///")
-      if start_pos then
-        highlight.apply(minimap_bufnr, M.ns_syntax, "XmapCommentDoc", minimap_line_nr - 1, start_pos - 1, -1)
-      end
-    elseif line_text:match("^.%s*%d+ //") then
-      -- Regular comment
-      local start_pos = line_text:find("//")
-      if start_pos then
-        highlight.apply(minimap_bufnr, M.ns_syntax, "XmapCommentNormal", minimap_line_nr - 1, start_pos - 1, -1)
-      end
     else
+      -- Rendered comment lines start with a comment icon; highlight the entire comment content.
+      local comment_icon = "󰆈"
+      local comment_icon_pos = line_text:find(comment_icon, 1, true)
+      if comment_icon_pos then
+        local hl_group = "XmapCommentNormal"
+        local after_icon = line_text:sub(comment_icon_pos + #comment_icon):gsub("^%s*", "")
+        if after_icon:match("^///") or after_icon:match("^//!") or after_icon:match("^/%*%*") or after_icon:match("^%-%-%-") then
+          hl_group = "XmapCommentDoc"
+        end
+        highlight.apply(minimap_bufnr, M.ns_syntax, hl_group, minimap_line_nr - 1, comment_icon_pos - 1, -1)
+        goto continue
+      end
+
       -- Try to highlight keywords on ALL lines, not just structural nodes
       -- Text format: "↑ 22  let provider" or "↓  3  func init"
       -- Skip arrow (pos 0), then skip spaces and numbers, then find first letter
@@ -472,7 +584,6 @@ function M.apply_relative_number_highlighting(minimap_bufnr, main_bufnr, main_wi
         end
       end
     end
-
     ::continue::
   end
 end
@@ -480,7 +591,7 @@ end
 -- Apply syntax highlighting based on Tree-sitter
 -- @param minimap_bufnr number: Minimap buffer
 -- @param main_bufnr number: Main buffer
-function M.apply_syntax_highlighting(minimap_bufnr, main_bufnr)
+function M.apply_syntax_highlighting(minimap_bufnr, main_bufnr, structural_nodes)
   if not vim.api.nvim_buf_is_valid(minimap_bufnr) or not vim.api.nvim_buf_is_valid(main_bufnr) then
     return
   end
@@ -502,7 +613,7 @@ function M.apply_syntax_highlighting(minimap_bufnr, main_bufnr)
   end
 
   -- Get structural nodes from Tree-sitter
-  local nodes = treesitter.get_structural_nodes(main_bufnr, filetype)
+  local nodes = structural_nodes or treesitter.get_structural_nodes(main_bufnr, filetype)
 
   -- Apply highlights for each structural node (only if rendered in minimap)
   for _, node in ipairs(nodes) do
@@ -512,44 +623,123 @@ function M.apply_syntax_highlighting(minimap_bufnr, main_bufnr)
     local source_line = node.start_line + 1 -- convert to 1-indexed
     local minimap_line = line_lookup[source_line]
     if minimap_line then
-      highlight.apply(minimap_bufnr, M.ns_structure, hl_group, minimap_line - 1, 0, -1)
+      highlight.apply(minimap_bufnr, M.ns_structure, hl_group, minimap_line - 1, RELATIVE_PREFIX_LEN, -1)
     end
   end
 
   -- Heuristic fallback when no nodes are returned (e.g., parser missing)
   if #nodes == 0 then
     local lines = vim.api.nvim_buf_get_lines(main_bufnr, 0, -1, false)
-    for minimap_line, source_line in pairs(line_lookup) do
+    for source_line, minimap_line in pairs(line_lookup) do
       local text = lines[source_line] or ""
 
       -- Basic Lua function detection: function foo(...) or local function foo(...)
       if filetype == "lua" then
         if text:match("^%s*local%s+function%s+[%w_%.:]+") or text:match("^%s*function%s+[%w_%.:]+") then
-          highlight.apply(minimap_bufnr, M.ns_structure, "XmapFunction", minimap_line - 1, 0, -1)
+          highlight.apply(minimap_bufnr, M.ns_structure, "XmapFunction", minimap_line - 1, RELATIVE_PREFIX_LEN, -1)
         end
       end
     end
   end
 end
 
--- Highlight the visible viewport in minimap
--- @param minimap_bufnr number: Minimap buffer
--- @param main_winid number: Main window
-function M.highlight_viewport(minimap_bufnr, main_winid)
-  if not vim.api.nvim_buf_is_valid(minimap_bufnr) or not vim.api.nvim_win_is_valid(main_winid) then
+function M.highlight_cursor_line(minimap_bufnr, minimap_line)
+  if not vim.api.nvim_buf_is_valid(minimap_bufnr) then
     return
   end
 
-  -- Clear previous viewport highlights
-  highlight.clear(minimap_bufnr, M.ns_viewport)
+  highlight.clear(minimap_bufnr, M.ns_cursor)
 
-  -- Get visible range in main window
-  local range = navigation.get_visible_range(main_winid)
-
-  -- Highlight visible lines in minimap
-  for line = range.start - 1, range["end"] - 1 do
-    highlight.apply(minimap_bufnr, M.ns_viewport, "XmapViewport", line, 0, -1)
+  if not minimap_line or minimap_line < 1 then
+    return
   end
+
+  -- Use an extmark with `hl_eol` so the highlight covers the full window width.
+  pcall(vim.api.nvim_buf_set_extmark, minimap_bufnr, M.ns_cursor, minimap_line - 1, 0, {
+    hl_group = "XmapCursor",
+    hl_eol = true,
+    hl_mode = "combine",
+    priority = 100,
+  })
+end
+
+-- Update only the relative prefix + highlighting for cursor moves.
+function M.update_relative_only()
+  if not M.state.is_open or not M.state.bufnr or not M.state.main_bufnr then
+    return
+  end
+
+  if not vim.api.nvim_buf_is_valid(M.state.bufnr) or not vim.api.nvim_buf_is_valid(M.state.main_bufnr) then
+    M.close()
+    return
+  end
+
+  if not (M.state.main_winid and vim.api.nvim_win_is_valid(M.state.main_winid)) then
+    return
+  end
+
+  local current_line = get_relative_base_line(M.state.main_winid)
+  local existing_lines = vim.api.nvim_buf_get_lines(M.state.bufnr, 0, -1, false)
+
+  local updated = {}
+  local changed = false
+
+  for minimap_line, line_text in ipairs(existing_lines) do
+    local source_line = M.state.line_mapping[minimap_line]
+    if source_line then
+      local _, prefix = format_relative_prefix(source_line, current_line)
+      local content = ""
+      if #line_text >= RELATIVE_PREFIX_LEN then
+        content = line_text:sub(RELATIVE_PREFIX_LEN + 1)
+      end
+      local new_text = prefix .. content
+      updated[minimap_line] = new_text
+      if new_text ~= line_text then
+        changed = true
+      end
+    else
+      updated[minimap_line] = line_text
+    end
+  end
+
+  if changed then
+    vim.api.nvim_buf_set_option(M.state.bufnr, "modifiable", true)
+    vim.api.nvim_buf_set_lines(M.state.bufnr, 0, -1, false, updated)
+    vim.api.nvim_buf_set_option(M.state.bufnr, "modifiable", false)
+  end
+
+  -- Clear background-style highlights (viewport/cursor) and refresh syntax highlights.
+  highlight.clear(M.state.bufnr, M.ns_viewport)
+  highlight.clear(M.state.bufnr, M.ns_cursor)
+  M.apply_relative_number_highlighting(M.state.bufnr, M.state.main_bufnr, M.state.main_winid, current_line)
+
+  if M.state.winid and vim.api.nvim_win_is_valid(M.state.winid) then
+    local is_minimap_focused = vim.api.nvim_get_current_win() == M.state.winid
+    if not is_minimap_focused then
+      navigation.update_minimap_cursor(M.state.winid, current_line, M.state.line_mapping)
+    end
+    local minimap_line = vim.api.nvim_win_get_cursor(M.state.winid)[1]
+    M.highlight_cursor_line(M.state.bufnr, minimap_line)
+  end
+
+  M.state.last_relative_update = vim.loop.now()
+end
+
+function M.throttled_relative_update()
+  local opts = config.get()
+  local now = vim.loop.now()
+
+  if now - (M.state.last_relative_update or 0) < (opts.render.throttle_ms or 0) then
+    if M.state.relative_timer then
+      M.state.relative_timer:stop()
+    end
+    M.state.relative_timer = vim.defer_fn(function()
+      M.update_relative_only()
+    end, opts.render.throttle_ms)
+    return
+  end
+
+  M.update_relative_only()
 end
 
 -- Update minimap content
@@ -564,7 +754,8 @@ function M.update()
   end
 
   -- Render buffer content with relative line numbers
-  local rendered_lines, line_mapping = M.render_buffer(M.state.main_bufnr, M.state.main_winid)
+  local current_line = get_relative_base_line(M.state.main_winid)
+  local rendered_lines, line_mapping, structural_nodes = M.render_buffer(M.state.main_bufnr, M.state.main_winid, current_line)
 
   -- Store line mapping for navigation
   M.state.line_mapping = line_mapping
@@ -575,14 +766,21 @@ function M.update()
   vim.api.nvim_buf_set_option(M.state.bufnr, "modifiable", false)
 
   -- Apply syntax highlighting for arrows, numbers, icons, and structure
-  M.apply_relative_number_highlighting(M.state.bufnr, M.state.main_bufnr, M.state.main_winid)
-  M.apply_syntax_highlighting(M.state.bufnr, M.state.main_bufnr)
+  highlight.clear(M.state.bufnr, M.ns_viewport)
+  highlight.clear(M.state.bufnr, M.ns_cursor)
+  M.apply_syntax_highlighting(M.state.bufnr, M.state.main_bufnr, structural_nodes)
+  M.apply_relative_number_highlighting(M.state.bufnr, M.state.main_bufnr, M.state.main_winid, current_line)
 
-  -- Update minimap cursor to follow main buffer (viewport highlighting disabled for now)
+  -- Update minimap cursor to follow main buffer
   if M.state.main_winid and vim.api.nvim_win_is_valid(M.state.main_winid) then
     local main_line = navigation.get_main_cursor_line(M.state.main_winid)
     if M.state.winid and vim.api.nvim_win_is_valid(M.state.winid) then
-      navigation.update_minimap_cursor(M.state.winid, main_line)
+      local is_minimap_focused = vim.api.nvim_get_current_win() == M.state.winid
+      if not is_minimap_focused then
+        navigation.update_minimap_cursor(M.state.winid, main_line, M.state.line_mapping)
+      end
+      local minimap_line = vim.api.nvim_win_get_cursor(M.state.winid)[1]
+      M.highlight_cursor_line(M.state.bufnr, minimap_line)
     end
   end
 
@@ -661,6 +859,10 @@ function M.close()
     M.state.update_timer:stop()
     M.state.update_timer = nil
   end
+  if M.state.relative_timer then
+    M.state.relative_timer:stop()
+    M.state.relative_timer = nil
+  end
 
   -- Clear autocommands
   pcall(vim.api.nvim_del_augroup_by_name, "XmapUpdate")
@@ -710,19 +912,80 @@ function M.setup_autocommands()
     group = augroup,
     buffer = M.state.main_bufnr,
     callback = function()
-      -- Clear navigation virtual text when moving in main buffer
-      local navigation = require("xmap.navigation")
-      if M.state.bufnr and vim.api.nvim_buf_is_valid(M.state.bufnr) then
-        vim.api.nvim_buf_clear_namespace(M.state.bufnr, navigation.ns_relative, 0, -1)
-        -- Fast path: only refresh relative markers to avoid re-rendering entire buffer on every move
-        if M.state.line_mapping and #M.state.line_mapping > 0 then
-          M.apply_relative_number_highlighting(M.state.bufnr, M.state.main_bufnr, M.state.main_winid)
-          return
+      if M.state.bufnr and vim.api.nvim_buf_is_valid(M.state.bufnr) and M.state.line_mapping and #M.state.line_mapping > 0 then
+        M.throttled_relative_update()
+        return
+      end
+      M.throttled_update()
+    end,
+  })
+
+  -- Keep a cursor highlight inside the minimap:
+  -- - while focused: follows minimap cursor (navigation)
+  -- - while not focused: follows main cursor mapping
+  vim.api.nvim_create_autocmd({ "BufWinEnter", "WinEnter" }, {
+    group = augroup,
+    buffer = M.state.bufnr,
+    callback = function()
+      if M.state.bufnr and M.state.winid and vim.api.nvim_win_is_valid(M.state.winid) then
+        local opts = config.get()
+        if opts.navigation.follow_cursor and M.state.main_winid and vim.api.nvim_win_is_valid(M.state.main_winid) then
+          M.state.navigation_anchor_line = navigation.get_main_cursor_line(M.state.main_winid)
+        else
+          M.state.navigation_anchor_line = nil
+        end
+        local minimap_line = vim.api.nvim_win_get_cursor(M.state.winid)[1]
+        M.highlight_cursor_line(M.state.bufnr, minimap_line)
+      end
+    end,
+  })
+
+  vim.api.nvim_create_autocmd("CursorMoved", {
+    group = augroup,
+    buffer = M.state.bufnr,
+    callback = function()
+      if M.state.bufnr and M.state.winid and vim.api.nvim_win_is_valid(M.state.winid) then
+        local minimap_line = vim.api.nvim_win_get_cursor(M.state.winid)[1]
+        M.highlight_cursor_line(M.state.bufnr, minimap_line)
+
+        local opts = config.get()
+        if opts.navigation.follow_cursor and vim.api.nvim_get_current_win() == M.state.winid then
+          if M.state.main_bufnr and M.state.main_winid then
+            navigation.center_main_on_minimap_cursor(
+              M.state.winid,
+              M.state.main_bufnr,
+              M.state.main_winid,
+              M.state.line_mapping
+            )
+          end
         end
       end
+    end,
+  })
 
-      -- Fallback to full update if mapping missing
-      M.throttled_update()
+  vim.api.nvim_create_autocmd({ "BufLeave", "WinLeave" }, {
+    group = augroup,
+    buffer = M.state.bufnr,
+    callback = function()
+      M.state.navigation_anchor_line = nil
+      if not (M.state.bufnr and vim.api.nvim_buf_is_valid(M.state.bufnr)) then
+        return
+      end
+      if not (M.state.winid and vim.api.nvim_win_is_valid(M.state.winid)) then
+        return
+      end
+      if not (M.state.main_winid and vim.api.nvim_win_is_valid(M.state.main_winid)) then
+        return
+      end
+
+      local main_line = navigation.get_main_cursor_line(M.state.main_winid)
+      navigation.update_minimap_cursor(M.state.winid, main_line, M.state.line_mapping)
+      local minimap_line = vim.api.nvim_win_get_cursor(M.state.winid)[1]
+      M.highlight_cursor_line(M.state.bufnr, minimap_line)
+
+      if M.state.main_bufnr and vim.api.nvim_buf_is_valid(M.state.main_bufnr) then
+        M.update_relative_only()
+      end
     end,
   })
 
