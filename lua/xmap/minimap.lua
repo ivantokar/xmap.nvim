@@ -42,6 +42,7 @@ M.state = {
   relative_timer = nil, -- Throttle timer for cursor-only updates
   line_mapping = {}, -- Maps minimap line numbers to source line numbers
   navigation_anchor_line = nil, -- Base line for relative distances while minimap is focused
+  follow_scheduled = false, -- Coalesce follow-current-buffer updates
 }
 
 local function get_relative_base_line(main_winid)
@@ -809,6 +810,110 @@ function M.throttled_update()
   M.update()
 end
 
+-- Follow the currently active window/buffer when minimap is open.
+-- This keeps the minimap in sync when switching buffers or windows.
+function M._follow_current_target()
+  if not M.state.is_open then
+    return
+  end
+  if not (M.state.winid and vim.api.nvim_win_is_valid(M.state.winid)) then
+    M.close()
+    return
+  end
+
+  local function is_supported_target(bufnr)
+    if not (bufnr and vim.api.nvim_buf_is_valid(bufnr)) then
+      return false
+    end
+    if M.state.bufnr and bufnr == M.state.bufnr then
+      return false
+    end
+    local buftype = vim.api.nvim_buf_get_option(bufnr, "buftype")
+    if buftype ~= "" then
+      return false
+    end
+    local filetype = vim.api.nvim_buf_get_option(bufnr, "filetype")
+    return config.is_filetype_supported(filetype)
+  end
+
+  local function attach_target(main_bufnr, main_winid)
+    local buffer_changed = main_bufnr ~= M.state.main_bufnr
+    local win_changed = main_winid ~= M.state.main_winid
+
+    if not buffer_changed and not win_changed then
+      return
+    end
+
+    M.state.main_bufnr = main_bufnr
+    M.state.main_winid = main_winid
+    M.state.navigation_anchor_line = nil
+
+    if buffer_changed then
+      M.setup_autocommands()
+      M.update()
+    else
+      M.throttled_relative_update()
+    end
+  end
+
+  local current_winid = vim.api.nvim_get_current_win()
+  local current_bufnr = vim.api.nvim_get_current_buf()
+
+  local current_is_minimap = current_winid == M.state.winid or current_bufnr == M.state.bufnr
+
+  if not current_is_minimap and is_supported_target(current_bufnr) then
+    attach_target(current_bufnr, current_winid)
+    return
+  end
+
+  if is_supported_target(M.state.main_bufnr) then
+    local main_winid = M.state.main_winid
+    if
+      not (
+        main_winid
+        and vim.api.nvim_win_is_valid(main_winid)
+        and vim.api.nvim_win_get_buf(main_winid) == M.state.main_bufnr
+      )
+    then
+      main_winid = nil
+      for _, winid in ipairs(vim.api.nvim_list_wins()) do
+        if winid ~= M.state.winid and vim.api.nvim_win_get_buf(winid) == M.state.main_bufnr then
+          main_winid = winid
+          break
+        end
+      end
+    end
+
+    if main_winid then
+      attach_target(M.state.main_bufnr, main_winid)
+      return
+    end
+  end
+
+  for _, winid in ipairs(vim.api.nvim_list_wins()) do
+    if winid ~= M.state.winid then
+      local bufnr = vim.api.nvim_win_get_buf(winid)
+      if is_supported_target(bufnr) then
+        attach_target(bufnr, winid)
+        return
+      end
+    end
+  end
+
+  M.close()
+end
+
+function M.follow_current_target()
+  if M.state.follow_scheduled then
+    return
+  end
+  M.state.follow_scheduled = true
+  vim.schedule(function()
+    M.state.follow_scheduled = false
+    M._follow_current_target()
+  end)
+end
+
 -- Open minimap for current buffer
 function M.open()
   -- Check if already open
@@ -854,6 +959,9 @@ function M.close()
     return
   end
 
+  local minimap_bufnr = M.state.bufnr
+  local minimap_winid = M.state.winid
+
   -- Clear timers
   if M.state.update_timer then
     M.state.update_timer:stop()
@@ -867,14 +975,46 @@ function M.close()
   -- Clear autocommands
   pcall(vim.api.nvim_del_augroup_by_name, "XmapUpdate")
 
-  -- Close window
-  if M.state.winid and vim.api.nvim_win_is_valid(M.state.winid) then
-    vim.api.nvim_win_close(M.state.winid, true)
+  -- Close window (or repurpose it if it's the last window in the tabpage)
+  if minimap_winid and vim.api.nvim_win_is_valid(minimap_winid) then
+    local tabpage = vim.api.nvim_win_get_tabpage(minimap_winid)
+    local wins = vim.api.nvim_tabpage_list_wins(tabpage)
+
+    if #wins > 1 then
+      pcall(vim.api.nvim_win_close, minimap_winid, true)
+    else
+      local replacement_bufnr = nil
+
+      if M.state.main_bufnr and vim.api.nvim_buf_is_valid(M.state.main_bufnr) and M.state.main_bufnr ~= minimap_bufnr then
+        replacement_bufnr = M.state.main_bufnr
+      end
+
+      if not replacement_bufnr then
+        for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
+          if bufnr ~= minimap_bufnr and vim.api.nvim_buf_is_valid(bufnr) then
+            local buftype = vim.api.nvim_buf_get_option(bufnr, "buftype")
+            local listed = vim.api.nvim_buf_get_option(bufnr, "buflisted")
+            if buftype == "" and listed then
+              replacement_bufnr = bufnr
+              break
+            end
+          end
+        end
+      end
+
+      if replacement_bufnr then
+        pcall(vim.api.nvim_win_set_buf, minimap_winid, replacement_bufnr)
+      else
+        pcall(vim.api.nvim_win_call, minimap_winid, function()
+          vim.cmd("enew")
+        end)
+      end
+    end
   end
 
   -- Delete buffer
-  if M.state.bufnr and vim.api.nvim_buf_is_valid(M.state.bufnr) then
-    vim.api.nvim_buf_delete(M.state.bufnr, { force = true })
+  if minimap_bufnr and vim.api.nvim_buf_is_valid(minimap_bufnr) then
+    pcall(vim.api.nvim_buf_delete, minimap_bufnr, { force = true })
   end
 
   -- Reset state
@@ -1003,19 +1143,19 @@ function M.setup_autocommands()
     group = augroup,
     buffer = M.state.main_bufnr,
     callback = function()
-      M.close()
+      M.follow_current_target()
     end,
   })
 
-  -- Also close if buffer becomes invalid (extra safety check)
-  vim.api.nvim_create_autocmd({ "BufEnter", "WinEnter" }, {
+  -- Keep minimap target in sync when switching buffers/windows.
+  vim.api.nvim_create_autocmd({ "BufEnter", "WinEnter", "FileType" }, {
     group = augroup,
     callback = function()
-      if M.state.is_open and M.state.main_bufnr then
-        if not vim.api.nvim_buf_is_valid(M.state.main_bufnr) then
-          M.close()
-        end
+      if not M.state.is_open then
+        return
       end
+
+      M.follow_current_target()
     end,
   })
 

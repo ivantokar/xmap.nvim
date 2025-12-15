@@ -1,4 +1,4 @@
-.PHONY: test test-lua test-swift dev clean install-local
+.PHONY: test test-lua test-swift test-follow dev clean install-local
 
 # Test with minimal config
 test:
@@ -11,6 +11,10 @@ test-lua:
 # Test with Swift file
 test-swift:
 	nvim -u test_config.lua test.swift
+
+# Headless QA regression checks
+test-follow:
+	nvim --headless -n -i NONE -u test_config.lua -c "lua dofile('scripts/qa_follow_active_buffer.lua')"
 
 # Open for development (uses your actual config)
 dev:

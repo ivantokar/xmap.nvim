@@ -186,7 +186,36 @@ function M.setup_minimap_keymaps(minimap_bufnr, minimap_winid, main_bufnr, main_
   -- Jump to line mapping
   if opts.keymaps.jump then
     vim.keymap.set("n", opts.keymaps.jump, function()
-      M.jump_to_line(minimap_bufnr, minimap_winid, main_bufnr, main_winid)
+      local minimap = require("xmap.minimap")
+      local current_main_bufnr = minimap.state.main_bufnr
+      local current_main_winid = minimap.state.main_winid
+
+      if not (current_main_bufnr and vim.api.nvim_buf_is_valid(current_main_bufnr)) then
+        return
+      end
+
+      if not (current_main_winid and vim.api.nvim_win_is_valid(current_main_winid)) then
+        current_main_winid = nil
+      end
+
+      if current_main_winid and vim.api.nvim_win_get_buf(current_main_winid) ~= current_main_bufnr then
+        current_main_winid = nil
+      end
+
+      if not current_main_winid then
+        for _, winid in ipairs(vim.api.nvim_list_wins()) do
+          if vim.api.nvim_win_get_buf(winid) == current_main_bufnr then
+            current_main_winid = winid
+            break
+          end
+        end
+      end
+
+      if not current_main_winid then
+        return
+      end
+
+      M.jump_to_line(minimap_bufnr, minimap_winid, current_main_bufnr, current_main_winid)
     end, { buffer = minimap_bufnr, silent = true, desc = "Jump to line" })
   end
 

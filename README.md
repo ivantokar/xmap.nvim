@@ -375,7 +375,7 @@ require("xmap").setup({
 ## Known Limitations
 
 - **1:1 Line Mapping**: Currently, each line in the minimap corresponds to one line in the main buffer. Future versions may support more compact representations.
-- **Single Buffer**: One minimap per buffer. Split windows show the same minimap.
+- **Single Minimap**: One minimap window that follows the active buffer (supported filetypes).
 - **No Mouse Support**: Designed for keyboard-only navigation (mouse support may be added later).
 
 ## Future Ideas
