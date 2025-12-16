@@ -12,7 +12,7 @@ xmap.nvim is a Neovim plugin that provides an Xcode-style minimap with Tree-sitt
 
 ```bash
 # Open Neovim with the plugin loaded from local directory
-nvim --cmd "set rtp+=." test.lua
+nvim --cmd "set rtp+=." test.swift
 
 # Test plugin commands interactively
 :XmapToggle    # Toggle minimap
@@ -22,15 +22,10 @@ nvim --cmd "set rtp+=." test.lua
 :XmapFocus     # Focus minimap window
 ```
 
-### Testing with Different Filetypes
+### Testing
 
 ```lua
--- In Neovim, create test files for different languages
 :e test.swift
-:e test.lua
-:e test.ts
-
--- Each should trigger appropriate Tree-sitter highlighting
 ```
 
 ## Architecture
@@ -42,10 +37,11 @@ The plugin follows a modular architecture with clear separation of concerns:
 **Core Modules (lua/xmap/):**
 - `init.lua` - Main API and entry point. Exposes public functions (`setup()`, `open()`, `close()`, `toggle()`, etc.) and initializes all submodules
 - `config.lua` - Configuration management with defaults. Handles user config merging and filetype validation
-- `minimap.lua` - Minimap window and buffer management. Core rendering logic with 1:1 line mapping between minimap and main buffer
-- `navigation.lua` - Cursor navigation and jumping between minimap and main buffer. Handles relative position indicators
-- `treesitter.lua` - Tree-sitter integration for structural syntax highlighting. Contains language-specific queries
+- `minimap.lua` - Minimap window/buffer management and rendering pipeline. Builds a source-line mapping for rendered entries.
+- `navigation.lua` - Jumping/centering between minimap and main buffer. Resolves minimap-line → source-line via `minimap.state.line_mapping`.
+- `treesitter.lua` - Tree-sitter integration for structural syntax highlighting (language queries come from providers)
 - `highlight.lua` - Highlight group definitions and application. All groups link to standard Neovim highlights by default
+- `lang/` - Language providers (`lang/swift.lua`, etc.)
 
 **Plugin Loader:**
 - `plugin/xmap.lua` - Defines Vim commands (`:XmapToggle`, etc.) and prevents double-loading
@@ -68,7 +64,7 @@ The plugin follows a modular architecture with clear separation of concerns:
 - Always returns focus to main window after operations
 
 **Tree-sitter Integration:**
-- Language-specific queries defined as strings in `treesitter.queries` table
+- Language queries provided by `lua/xmap/lang/<filetype>.lua`
 - Graceful degradation when nvim-treesitter not installed
 - Query captures map to highlight groups via `get_highlight_for_type()`
 
@@ -84,19 +80,21 @@ The plugin follows a modular architecture with clear separation of concerns:
 
 ### Line Rendering Logic
 
-Two rendering modes (`config.render.mode`):
-- **"text"** (default): Truncates and trims actual text to `max_line_length` characters with Nerd Font icons for structural elements
-- **"compact"**: Uses block characters (█, ▓, ░, ·) based on code density calculation
+The minimap renders a curated list of entries (not every source line):
+- **Symbols**: language provider parses declaration lines (e.g. `func`, `struct`, `enum`)
+- **Comments/markers**: provider can render comment lines and MARK/TODO/FIXME-style markers
 
-**Icon Integration**: The `get_line_icon()` function checks if a line is the start of a structural element (function, class, variable) and prepends the appropriate Nerd Font icon. Icons are retrieved via `treesitter.get_icon_for_type()`.
+**Icon Integration**: Rendering uses Nerd Font icons per symbol type via `treesitter.get_icon_for_type()`.
 
-1:1 line mapping means minimap line N always corresponds to main buffer line N.
+Because the minimap is a filtered list, navigation relies on:
+- `minimap.state.line_mapping`: minimap-line (1-indexed) → source-line (1-indexed)
+- `navigation.jump_to_line()` resolves through that mapping when present
 
 ### Tree-sitter Query System
 
 Each language has a query string that identifies structural elements:
 - `@class` captures: classes, structs, protocols, enums, interfaces
-- `@function` captures: functions, methods, init/deinit, arrow functions
+- `@function` captures: functions, methods, init/deinit
 - `@variable` captures: variable declarations, properties
 
 Queries are parsed on-demand and cached by Tree-sitter. Results are sorted by start line and highlighted with corresponding `Xmap*` highlight groups.
@@ -105,10 +103,11 @@ Queries are parsed on-demand and cached by Tree-sitter. Results are sorted by st
 
 ### Highlight Namespace Isolation
 
-Three separate namespaces prevent highlight conflicts:
+Four separate namespaces prevent highlight conflicts:
 - `ns_viewport`: Highlights visible region in main buffer (uses `XmapViewport`)
 - `ns_cursor`: Highlights current cursor line (uses `XmapCursor`)
-- `ns_syntax`: Tree-sitter structural highlights (uses `XmapFunction`, `XmapClass`, etc.)
+- `ns_syntax`: Relative prefix + comment/keyword highlights (uses `XmapRelative*`, `XmapComment*`, etc.)
+- `ns_structure`: Tree-sitter structural highlights (uses `XmapFunction`, `XmapClass`, etc.)
 
 Namespaces are cleared before each re-application to prevent stale highlights.
 
@@ -116,24 +115,16 @@ Namespaces are cleared before each re-application to prevent stale highlights.
 
 Two-step validation in `config.is_filetype_supported()`:
 1. Check if filetype is in `exclude_filetypes` (early return false)
-2. Check if filetype is in `filetypes` (return true)
+2. Check if filetype is in `filetypes` and a language provider exists (e.g. `xmap.lang.swift`)
 
 This allows users to explicitly exclude filetypes that would otherwise be supported.
 
-### Relative Jump Indicators
+### Relative Prefix (Distance + Direction)
 
-When navigating in minimap with `j`/`k`, `navigation.show_relative_indicator()` displays distance to target with improved formatting:
-- Format: `arrow > number > entity` (e.g., "↑ 15 setupConfig")
-- Arrow colors: Green (↑) for up, Red (↓) for down
-- Number is dimmed (uses `XmapRelativeNumber` highlight group)
-- Entity name extracted via `get_entity_at_line()` using pattern matching on Tree-sitter structural nodes
-- Three display modes: `notify` (plain text), `float` (colored floating window with syntax highlighting - recommended), `virtual` (not yet implemented)
-
-The indicator:
-1. Compares main buffer cursor line with minimap cursor line to calculate relative distance
-2. Extracts entity name (function/class name) at target line using Tree-sitter nodes
-3. Formats message with colored arrow, dimmed number, and entity name
-4. In "float" mode, applies individual highlight groups to each component
+Each rendered minimap entry is prefixed with the distance/direction relative to a base line:
+- Format is configurable via `render.relative_prefix` (number width, separators, direction symbols/letters)
+- Highlighted via `XmapRelativeNumber` and `XmapRelativeUp/Down/Current`
+- The base line is typically the main cursor line, but can be “anchored” while the minimap is focused for a more stable navigation experience
 
 ### Autocommand Cleanup and Buffer Close Handling
 
@@ -163,11 +154,10 @@ The plugin uses Nerd Font icons to visually distinguish code structures in the m
 - Comments:  (`nf-cod-comment`)
 
 **How It Works**:
-1. `minimap.get_line_icon(bufnr, line_nr)` checks if a line is the start of a structural element
-2. Queries Tree-sitter structural nodes for the buffer
-3. If line matches a node's `start_line`, retrieves icon via `treesitter.get_icon_for_type(node.type)`
-4. Icon is prepended to the rendered line text with a space separator
-5. Max line length is adjusted to account for icon width (2 characters)
+1. The language provider (`xmap.lang.<filetype>`) parses a source line into a symbol item (keyword + kind)
+2. Rendering maps the symbol kind to an icon via `treesitter.get_icon_for_type()`
+3. Icon is prepended to the rendered line text with a space separator
+4. Text is truncated to `render.max_line_length`
 
 To add more icons, update the `get_icon_for_type()` function in `treesitter.lua` with new mappings.
 
@@ -175,23 +165,17 @@ To add more icons, update the `get_icon_for_type()` function in `treesitter.lua`
 
 To add a new language:
 
-1. **Add to default filetypes** in `config.lua`:
+1. **Create a provider module** at `lua/xmap/lang/<filetype>.lua` that implements:
+   - `get_query()` (Tree-sitter query, optional)
+   - `parse_symbol(line)` (extract keyword/type/name for rendering)
+   - `render_comment(line, line_nr, all_lines)` (optional)
+
+2. **Enable the filetype** in your config:
 ```lua
-filetypes = { "swift", "lua", "typescript", "javascript", "python", "rust", "go", "c", "cpp", "ruby" }
+require("xmap").setup({ filetypes = { "swift", "ruby" } })
 ```
 
-2. **Add Tree-sitter query** in `treesitter.lua`:
-```lua
-ruby = [[
-  (class) @class
-  (module) @class
-  (method) @function
-  (singleton_method) @function
-  (assignment) @variable
-]],
-```
-
-3. **Ensure parser is installed**:
+3. **Ensure parser is installed (optional)**:
 ```vim
 :TSInstall ruby
 ```

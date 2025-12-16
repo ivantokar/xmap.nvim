@@ -1,94 +1,90 @@
 -- lua/xmap/treesitter.lua
 -- Tree-sitter integration for xmap.nvim
+--
+-- This module is intentionally small and generic:
+--   - It hides the optional dependency on `nvim-treesitter`.
+--   - It compiles and caches Tree-sitter queries per filetype.
+--   - It exposes helpers to map captures to icons/highlight groups.
+--
+-- Language-specific query strings do NOT live here. They come from provider modules
+-- (`lua/xmap/lang/<filetype>.lua`) via `provider.get_query()` / `provider.get_queries()`.
 
 local M = {}
 
 -- Check if nvim-treesitter is available
 M.available = false
 
--- Tree-sitter queries for different node types
--- These queries identify structural elements like functions, classes, etc.
-M.queries = {
-  -- Swift-specific queries
-  -- Note: Using only confirmed node types from Swift Tree-sitter parser
-  swift = [[
-    (class_declaration) @class
-    (function_declaration) @function
-    (init_declaration) @function
-    (property_declaration) @variable
-  ]],
+local lang = require("xmap.lang")
 
-  -- Lua queries
-  lua = [[
-    (function_declaration) @function
-    (function_definition) @function
-    (assignment_statement) @variable
-    (local_variable_declaration) @variable
-  ]],
+M._compiled_queries = {}
+M._query_error_shown = {}
 
-  -- TypeScript/JavaScript queries
-  typescript = [[
-    (class_declaration) @class
-    (interface_declaration) @class
-    (function_declaration) @function
-    (method_definition) @function
-    (arrow_function) @function
-    (variable_declarator) @variable
-  ]],
+local function is_non_empty_string(value)
+  return type(value) == "string" and value ~= ""
+end
 
-  javascript = [[
-    (class_declaration) @class
-    (function_declaration) @function
-    (method_definition) @function
-    (arrow_function) @function
-    (variable_declarator) @variable
-  ]],
+local function get_query_candidates(filetype)
+  -- Providers may expose either:
+  --   - `get_queries()` -> { "query v3", "query v2", ... } (preferred)
+  --   - `get_query()` -> "query v1"
+  --
+  -- We try candidates in order and cache the first one that parses successfully.
+  local provider = lang.get(filetype)
+  if not provider then
+    return {}
+  end
 
-  -- Python queries
-  python = [[
-    (class_definition) @class
-    (function_definition) @function
-    (assignment) @variable
-  ]],
+  if type(provider.get_queries) == "function" then
+    local ok, queries = pcall(provider.get_queries)
+    if ok and type(queries) == "table" then
+      return queries
+    end
+  end
 
-  -- Rust queries
-  rust = [[
-    (struct_item) @class
-    (enum_item) @class
-    (impl_item) @class
-    (trait_item) @class
-    (function_item) @function
-    (let_declaration) @variable
-  ]],
+  if type(provider.get_query) == "function" then
+    local ok, query_string = pcall(provider.get_query)
+    if ok and is_non_empty_string(query_string) then
+      return { query_string }
+    end
+  end
 
-  -- Go queries
-  go = [[
-    (type_declaration) @class
-    (function_declaration) @function
-    (method_declaration) @function
-    (var_declaration) @variable
-  ]],
+  return {}
+end
 
-  -- C/C++ queries
-  c = [[
-    (struct_specifier) @class
-    (function_definition) @function
-    (declaration) @variable
-  ]],
+local function get_compiled_query(filetype)
+  -- Cache "misses" as `false` so we don't keep trying to parse broken queries.
+  if M._compiled_queries[filetype] ~= nil then
+    return M._compiled_queries[filetype] or nil
+  end
 
-  cpp = [[
-    (class_specifier) @class
-    (struct_specifier) @class
-    (function_definition) @function
-    (declaration) @variable
-  ]],
-}
+  local candidates = get_query_candidates(filetype)
+  local last_error = nil
+
+  for _, query_string in ipairs(candidates) do
+    if is_non_empty_string(query_string) then
+      local ok, query_or_err = pcall(vim.treesitter.query.parse, filetype, query_string)
+      if ok and query_or_err then
+        M._compiled_queries[filetype] = query_or_err
+        return query_or_err
+      end
+      if not ok then
+        last_error = query_or_err
+      end
+    end
+  end
+
+  M._compiled_queries[filetype] = false
+  return nil, last_error
+end
 
 -- Initialize Tree-sitter integration
 function M.setup()
   -- Check if nvim-treesitter is installed
   local ok, _ = pcall(require, "nvim-treesitter")
   M.available = ok
+
+  M._compiled_queries = {}
+  M._query_error_shown = {}
 
   if not M.available then
     vim.notify("xmap.nvim: nvim-treesitter not found. Tree-sitter features disabled.", vim.log.levels.WARN)
@@ -135,12 +131,6 @@ function M.get_structural_nodes(bufnr, filetype)
     return {}
   end
 
-  -- Get query for this filetype
-  local query_string = M.queries[filetype]
-  if not query_string then
-    return {}
-  end
-
   local parser = M.get_parser(bufnr)
   if not parser then
     return {}
@@ -151,16 +141,12 @@ function M.get_structural_nodes(bufnr, filetype)
     return {}
   end
 
-  -- Parse the query
-  local ok, query = pcall(vim.treesitter.query.parse, filetype, query_string)
-  if not ok or not query then
-    -- Only show error once
-    if not M._query_error_shown then
-      vim.notify(
-        string.format("xmap.nvim: Failed to parse Tree-sitter query for %s", filetype),
-        vim.log.levels.WARN
-      )
-      M._query_error_shown = true
+  local query, last_error = get_compiled_query(filetype)
+  if not query then
+    -- We warn only once per filetype to avoid spamming on cursor moves.
+    if not M._query_error_shown[filetype] then
+      vim.notify(string.format("xmap.nvim: Failed to parse Tree-sitter query for %s", filetype), vim.log.levels.WARN)
+      M._query_error_shown[filetype] = true
     end
     return {}
   end
@@ -173,6 +159,7 @@ function M.get_structural_nodes(bufnr, filetype)
     local capture_name = query.captures[id]
     local start_row, start_col, end_row, end_col = node:range()
 
+    -- We store both the capture name and the range so callers can highlight and map to lines.
     table.insert(nodes, {
       type = capture_name,
       start_line = start_row,
@@ -220,6 +207,8 @@ end
 -- @param node_type string: Type of node (from capture)
 -- @return string: Nerd Font icon
 function M.get_icon_for_type(node_type)
+  -- Icons are intentionally limited to a small stable set so providers can map their
+  -- parsed symbol kinds to these without leaking language specifics into core logic.
   local map = {
     ["class"] = "󰠱",
     ["function"] = "󰊕",
@@ -235,6 +224,8 @@ end
 -- @param node_type string: Type of node (from capture)
 -- @return string: Highlight group name
 function M.get_highlight_for_type(node_type)
+  -- Keep capture names generic ("class", "function", ...) so highlight groups are
+  -- consistent across languages.
   local map = {
     ["class"] = "XmapClass",
     ["function"] = "XmapFunction",

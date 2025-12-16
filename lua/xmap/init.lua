@@ -1,5 +1,12 @@
 -- lua/xmap/init.lua
 -- Main API for xmap.nvim
+--
+-- This module is the public entry point used by users:
+--   require("xmap").setup({ ... })
+--   :XmapToggle / :XmapOpen / :XmapClose / :XmapRefresh / :XmapFocus
+--
+-- It wires together the internal modules (config/highlight/treesitter/minimap/navigation)
+-- and exposes a small stable API surface.
 
 local M = {}
 
@@ -16,6 +23,7 @@ M._initialized = false
 -- Setup function
 -- @param opts table: User configuration options
 function M.setup(opts)
+  -- Idempotent: safe to call multiple times, but users typically call once from init.lua.
   -- Merge user config with defaults
   config.setup(opts or {})
 
@@ -32,6 +40,7 @@ function M.setup(opts)
   M.setup_auto_open()
 
   -- Refresh highlights on colorscheme change
+  -- (re-apply links/fallbacks and user overrides).
   vim.api.nvim_create_autocmd("ColorScheme", {
     pattern = "*",
     callback = function()
@@ -88,6 +97,7 @@ end
 
 -- Open minimap
 function M.open()
+  -- Lazy-initialize if user calls API before `setup()`.
   if not M._initialized then
     M.setup()
   end
@@ -102,6 +112,7 @@ end
 
 -- Toggle minimap
 function M.toggle()
+  -- Lazy-initialize if user calls API before `setup()`.
   if not M._initialized then
     M.setup()
   end

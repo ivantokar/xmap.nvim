@@ -1,12 +1,8 @@
-.PHONY: test test-lua test-swift test-follow dev clean install-local
+.PHONY: test test-swift test-follow dev clean install-local
 
 # Test with minimal config
 test:
-	nvim -u test_config.lua test.lua
-
-# Test with Lua file
-test-lua:
-	nvim -u test_config.lua test.lua
+	nvim -u test_config.lua test.swift
 
 # Test with Swift file
 test-swift:
@@ -18,7 +14,7 @@ test-follow:
 
 # Open for development (uses your actual config)
 dev:
-	nvim -c "set rtp+=." test.lua
+	nvim -c "set rtp+=." test.swift
 
 # Clean generated files
 clean:
@@ -40,8 +36,7 @@ install-local:
 help:
 	@echo "xmap.nvim development commands:"
 	@echo ""
-	@echo "  make test        - Test with minimal config (test.lua)"
-	@echo "  make test-lua    - Test with Lua file"
+	@echo "  make test        - Test with minimal config (test.swift)"
 	@echo "  make test-swift  - Test with Swift file"
 	@echo "  make dev         - Open for development with your config"
 	@echo "  make clean       - Clean generated files"

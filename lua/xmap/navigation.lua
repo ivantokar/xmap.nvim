@@ -1,15 +1,26 @@
 -- lua/xmap/navigation.lua
 -- Navigation and jumping logic for xmap.nvim
+--
+-- This module is responsible for moving between the minimap and the main buffer.
+-- It is intentionally kept separate from rendering so that:
+--   - minimap.lua can focus on "what to show"
+--   - navigation.lua can focus on "how to move/jump"
+--
+-- Key ideas:
+--   - The minimap buffer is a derived view: not every source line is necessarily rendered.
+--   - `minimap.state.line_mapping` maps minimap-line -> source-line (both 1-indexed).
+--   - Jump/preview operations always resolve through that mapping when available.
 
 local config = require("xmap.config")
 
 local M = {}
 
 local function clamp(value, min_value, max_value)
+  -- Common helper: keep a number within a safe range.
   return math.max(min_value, math.min(value, max_value))
 end
 
--- State tracking
+-- Module-local state tracking (used mainly for UX / debugging).
 M.state = {
   minimap_cursor_line = 1, -- Current line in minimap (1-indexed)
   last_jump_line = nil, -- Last line jumped to
@@ -19,6 +30,7 @@ M.state = {
 -- @param winid number: Window ID of main buffer
 -- @return number: Current line (1-indexed)
 function M.get_main_cursor_line(winid)
+  -- Defensive: if a window is invalid (e.g. closed) just return a safe default.
   if not winid or not vim.api.nvim_win_is_valid(winid) then
     return 1
   end
@@ -33,6 +45,7 @@ end
 -- @param main_bufnr number: Main buffer number
 -- @param main_winid number: Main window ID
 function M.jump_to_line(minimap_bufnr, minimap_winid, main_bufnr, main_winid)
+  -- Jump is triggered from inside the minimap (default: <CR>).
   if not vim.api.nvim_win_is_valid(minimap_winid) or not vim.api.nvim_win_is_valid(main_winid) then
     return
   end
@@ -79,6 +92,8 @@ end
 -- @param main_winid number
 -- @param line_mapping table|nil
 function M.center_main_on_minimap_cursor(minimap_winid, main_bufnr, main_winid, line_mapping)
+  -- This is used by `navigation.follow_cursor`: while the minimap is focused, moving
+  -- the minimap cursor previews/centers the main buffer at that location.
   if not (vim.api.nvim_win_is_valid(minimap_winid) and vim.api.nvim_win_is_valid(main_winid)) then
     return
   end
@@ -121,6 +136,7 @@ function M.update_minimap_cursor(minimap_winid, main_line, line_mapping)
 
   if type(line_mapping) == "table" and #line_mapping > 0 then
     -- Pick the nearest rendered minimap line at-or-before the main cursor.
+    -- We do a binary search because line_mapping is sorted by source line and can be large.
     local lo, hi = 1, #line_mapping
     local best = 1
 
@@ -186,6 +202,8 @@ function M.setup_minimap_keymaps(minimap_bufnr, minimap_winid, main_bufnr, main_
   -- Jump to line mapping
   if opts.keymaps.jump then
     vim.keymap.set("n", opts.keymaps.jump, function()
+      -- The minimap can "follow" different main buffers over time (buffer switching).
+      -- Always resolve the *current* target buffer/window from minimap state.
       local minimap = require("xmap.minimap")
       local current_main_bufnr = minimap.state.main_bufnr
       local current_main_winid = minimap.state.main_winid
@@ -203,6 +221,7 @@ function M.setup_minimap_keymaps(minimap_bufnr, minimap_winid, main_bufnr, main_
       end
 
       if not current_main_winid then
+        -- Fall back to "any window currently showing the target buffer".
         for _, winid in ipairs(vim.api.nvim_list_wins()) do
           if vim.api.nvim_win_get_buf(winid) == current_main_bufnr then
             current_main_winid = winid

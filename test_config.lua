@@ -1,5 +1,5 @@
 -- Test configuration for xmap.nvim
--- Usage: nvim -u test_config.lua test.lua
+-- Usage: nvim -u test_config.lua test.swift
 
 -- Add current directory to runtime path
 vim.opt.rtp:prepend(".")

@@ -1,5 +1,9 @@
 -- plugin/xmap.lua
 -- Plugin loader for xmap.nvim
+--
+-- Neovim loads files in `plugin/` automatically on startup.
+-- This file is responsible only for defining user-facing commands.
+-- The actual implementation lives in `lua/xmap/`.
 
 -- Prevent loading twice
 if vim.g.loaded_xmap then
@@ -8,6 +12,7 @@ end
 vim.g.loaded_xmap = true
 
 -- Define user commands
+-- Commands call into the public API (`lua/xmap/init.lua`).
 vim.api.nvim_create_user_command("XmapToggle", function()
   require("xmap").toggle()
 end, { desc = "Toggle Xmap minimap" })

@@ -24,16 +24,14 @@ print("  ✓ Unloaded " .. count .. " modules")
 
 -- Reload xmap
 local success, err = pcall(function()
-  local default_languages = require("xmap.config").get_default_languages()
-  local default_ts_languages = require("xmap.config").get_default_languages()
   require("xmap").setup({
     width = 40, -- Wider to fit relative numbers + icons + text
     side = "right",
-    filetypes = default_languages,
+    filetypes = { "swift" },
     treesitter = {
       enable = true,
       highlight_scopes = true,
-      languages = default_ts_languages,
+      languages = { "swift" },
     },
   })
 end)

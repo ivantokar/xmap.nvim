@@ -13,7 +13,7 @@ An **Xcode-style minimap** for Neovim with full **keyboard navigation** and **Tr
 - 🎨 **Colorscheme Aware**: Uses highlight groups - no hard-coded colors
 - ⚡ **Performance Optimized**: Throttled updates and efficient rendering
 - 🔧 **Fully Configurable**: Customize every aspect to fit your workflow
-- 🦾 **Swift-First**: Built with Swift development in mind, works with any language
+- 🦾 **Swift (for now)**: Swift-only by default, with pluggable language providers
 - 🔍 **Compact Display**: Smaller font with icons for better space utilization
 
 ## Requirements
@@ -80,15 +80,12 @@ Here's the full default configuration:
 ```lua
 require("xmap").setup({
   -- Window settings
-  width = 20,              -- Width of minimap window
+  width = 40,              -- Width of minimap window
   side = "right",          -- "right" or "left"
   auto_open = false,       -- Auto-open for supported filetypes
 
   -- Supported filetypes
-  filetypes = {
-    "swift", "lua", "typescript", "javascript",
-    "python", "rust", "go", "c", "cpp"
-  },
+  filetypes = { "swift" },
 
   -- Filetypes to exclude
   exclude_filetypes = {
@@ -108,18 +105,35 @@ require("xmap").setup({
   treesitter = {
     enable = true,                    -- Enable Tree-sitter
     highlight_scopes = true,          -- Highlight functions/classes
-    languages = {
-      "swift", "lua", "typescript", "javascript",
-      "python", "rust", "go", "c", "cpp"
+    languages = { "swift" },
+  },
+
+  -- Symbol filtering per language (keyed by filetype)
+  symbols = {
+    swift = {
+      keywords = {},          -- When empty, uses Swift defaults
+      exclude = {},          -- e.g. { "let", "var" }
+      highlight_keywords = {}, -- Optional override for keyword highlighting list
     },
   },
 
+  -- Highlight overrides (re-applies on ColorScheme)
+  -- highlights = { XmapRelativeNumber = { link = "CursorLineNr", bold = true } }
+  highlights = {},
+
   -- Rendering options
   render = {
-    mode = "text",          -- "text" or "compact"
-    max_line_length = 20,   -- Characters per line in minimap
-    show_line_numbers = false,
-    viewport_char = "█",    -- Character for viewport indicator
+    relative_prefix = {
+      number_width = 3,
+      number_separator = " ",
+      separator = " ",
+      direction = {
+        up = "↑",
+        down = "↓",
+        current = "·",
+      },
+    },
+    max_line_length = 40,   -- Characters per minimap entry (incl. prefix)
     throttle_ms = 100,      -- Update throttle (milliseconds)
   },
 
@@ -177,24 +191,19 @@ require("xmap").setup({
   side = "right",
   auto_open = true,  -- Auto-open for supported files
   filetypes = { "swift" },
+  symbols = {
+    swift = {
+      exclude = { "let", "var" }, -- Hide properties, keep types + functions
+      -- Or set an explicit allowlist:
+      -- keywords = { "func", "struct", "enum" },
+    },
+  },
   treesitter = {
     enable = true,
     highlight_scopes = true,
   },
   render = {
-    mode = "text",
     max_line_length = 25,
-  },
-})
-```
-
-### Example: Minimal/Compact Mode
-
-```lua
-require("xmap").setup({
-  width = 15,
-  render = {
-    mode = "compact",  -- Use blocks instead of text
   },
 })
 ```
@@ -207,26 +216,20 @@ xmap.nvim uses Tree-sitter to provide structural awareness and highlighting. Thi
 - **Classes/Structs/Enums** stand out visually with  icon
 - **Variables** are marked with  icon
 - **Navigate by structure** - easier to see where functions begin/end
-- **Smart indicators** - When navigating, see entity names (e.g., "↑ 15 setupConfig")
+- **Smart indicators** - When navigating, see entity names (e.g., "15 ↑ setupConfig")
 
 ### Supported Languages
 
-Out of the box, xmap.nvim includes Tree-sitter queries for:
+Bundled: **Swift**.
 
-- Swift (primary focus)
-- Lua
-- TypeScript/JavaScript
-- Python
-- Rust
-- Go
-- C/C++
+To add another language later, add a provider module at `lua/xmap/lang/<filetype>.lua` and include the filetype in `filetypes` (and `treesitter.languages` if you want Tree-sitter highlighting).
 
 ### Enabling Tree-sitter
 
 Tree-sitter integration is enabled by default. Make sure you have the parsers installed:
 
 ```vim
-:TSInstall swift lua typescript javascript python rust go c cpp
+:TSInstall swift
 ```
 
 To disable Tree-sitter features:
@@ -269,14 +272,21 @@ xmap.nvim uses the following highlight groups, all linked to existing groups by 
 - `XmapRelativeUp` - Jump up indicator (→ `DiagnosticOk`)
 - `XmapRelativeDown` - Jump down indicator (→ `DiagnosticError`)
 - `XmapRelativeCurrent` - Current line indicator (→ `DiagnosticWarn`)
-- `XmapRelativeNumber` - Jump distance number (→ `LineNr`, dimmed)
+- `XmapRelativeNumber` - Jump distance number (→ `CursorLineNr`, brighter)
 - `XmapRelativeKeyword` - Keyword highlight (→ `Keyword`)
 - `XmapRelativeEntity` - Entity name display (→ `Identifier`)
 
 ### Customizing Highlights
 
 ```lua
--- In your init.lua or colorscheme
+-- Option A: via config (re-applies on ColorScheme)
+require("xmap").setup({
+  highlights = {
+    XmapRelativeNumber = { link = "CursorLineNr", bold = true },
+  },
+})
+
+-- Option B: manual (you may need to re-apply after :colorscheme)
 vim.api.nvim_set_hl(0, "XmapViewport", { bg = "#3e4451", bold = true })
 vim.api.nvim_set_hl(0, "XmapFunction", { fg = "#61afef", italic = true })
 vim.api.nvim_set_hl(0, "XmapClass", { fg = "#e5c07b", bold = true })
@@ -364,17 +374,17 @@ If you still don't see colored arrows/numbers, ensure your colorscheme isn't cle
 
 ### Minimap doesn't open for my filetype
 
-Add it to the supported filetypes:
+Bundled language support is provided via provider modules (e.g. `lua/xmap/lang/swift.lua`). To add a new filetype, create a provider module and include the filetype:
 
 ```lua
 require("xmap").setup({
-  filetypes = { "swift", "lua", "yourfiletype" },
+  filetypes = { "swift", "yourfiletype" },
 })
 ```
 
 ## Known Limitations
 
-- **1:1 Line Mapping**: Currently, each line in the minimap corresponds to one line in the main buffer. Future versions may support more compact representations.
+- **Outline-Only View**: The minimap currently renders a curated list of entries (symbols + comments/markers), not every source line.
 - **Single Minimap**: One minimap window that follows the active buffer (supported filetypes).
 - **No Mouse Support**: Designed for keyboard-only navigation (mouse support may be added later).
 
@@ -386,7 +396,7 @@ require("xmap").setup({
 - 🔥 **LSP Diagnostics**: Highlight errors/warnings
 - 📈 **Code Complexity**: Visual indicators for complex functions
 - 🖱️ **Mouse Support**: Click to jump (optional)
-- 🔢 **Smart Scaling**: Non-1:1 line mapping for better overview
+- 🔢 **Smart Scaling**: Adaptive density for large files (more/less detail)
 
 ## Contributing
 
@@ -396,7 +406,7 @@ Contributions are welcome! Feel free to:
 - Suggest features
 - Submit pull requests
 - Improve documentation
-- Add Tree-sitter queries for more languages
+- Add language providers for more languages
 
 ## License
 
