@@ -14,10 +14,10 @@
 
 local M = {}
 
--- Swift-only by default. Additional languages can be added by installing/creating
--- a matching provider module under `lua/xmap/lang/<filetype>.lua` and adding the
+-- Bundled languages. Additional languages can be added by installing/creating a
+-- matching provider module under `lua/xmap/lang/<filetype>.lua` and adding the
 -- filetype to `filetypes` (and `treesitter.languages` if desired).
-local DEFAULT_FILETYPES = { "swift" }
+local DEFAULT_FILETYPES = { "swift", "typescript", "typescriptreact" }
 
 local function get_default_filetypes()
 	return vim.deepcopy(DEFAULT_FILETYPES)
@@ -62,6 +62,16 @@ M.defaults = {
 			keywords = {}, -- When empty, uses the Swift provider defaults
 			exclude = {}, -- Keywords to hide (e.g. { "let", "var" })
 			highlight_keywords = {}, -- Optional override for keyword highlighting list
+		},
+		typescript = {
+			keywords = {}, -- When empty, uses the TypeScript provider defaults
+			exclude = {},
+			highlight_keywords = {},
+		},
+		typescriptreact = {
+			keywords = {}, -- When empty, uses the TypeScript provider defaults
+			exclude = {},
+			highlight_keywords = {},
 		},
 	},
 

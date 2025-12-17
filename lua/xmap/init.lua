@@ -167,21 +167,26 @@ end
 function M.diagnose()
   local bufnr = vim.api.nvim_get_current_buf()
   local filetype = vim.api.nvim_buf_get_option(bufnr, "filetype")
+  local ts_lang = filetype
+  if vim.treesitter and vim.treesitter.language and vim.treesitter.language.get_lang then
+    ts_lang = vim.treesitter.language.get_lang(filetype) or filetype
+  end
   
   print("=== xmap.nvim Diagnostics ===")
   print("Filetype: " .. filetype)
+  print("Tree-sitter language: " .. ts_lang)
   
   -- Check if nvim-treesitter is available
   local ts_ok, _ = pcall(require, "nvim-treesitter")
   print("nvim-treesitter available: " .. tostring(ts_ok))
   
   -- Check if parser is available
-  local parser = vim.treesitter.get_parser(bufnr, filetype, { error = false })
+  local parser = vim.treesitter.get_parser(bufnr, nil, { error = false })
   print("Tree-sitter parser for " .. filetype .. ": " .. tostring(parser ~= nil))
   
   if not parser then
     print("ERROR: No parser found for " .. filetype)
-    print("Install with: :TSInstall " .. filetype)
+    print("Install with: :TSInstall " .. ts_lang)
     return
   end
   

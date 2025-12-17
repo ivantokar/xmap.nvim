@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.0 - 2025-12-17
+
+- Add bundled TypeScript (`typescript`) and TSX (`typescriptreact`) language providers.
+- Detect JSX comment lines in TSX (`{/* ... */}`) for minimap comment entries.
+- Collapse multi-line `/* ... */` comments to a single minimap entry (first meaningful line only).
+- Resolve Tree-sitter language names for filetypes like `typescriptreact` (→ `tsx`) to improve query parsing.
+
 ## 0.3.0 - 2025-12-16
 
 - Swift-only bundled support with provider-based language architecture (easy to add new languages via `lua/xmap/lang/<filetype>.lua`).

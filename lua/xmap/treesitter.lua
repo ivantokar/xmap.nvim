@@ -23,6 +23,27 @@ local function is_non_empty_string(value)
   return type(value) == "string" and value ~= ""
 end
 
+local function resolve_treesitter_language(filetype)
+  -- Many Neovim filetypes map to a different Tree-sitter language name
+  -- (e.g. `typescriptreact` -> `tsx`). Resolve this mapping when possible.
+  if type(filetype) ~= "string" or filetype == "" then
+    return filetype
+  end
+
+  local ok, lang = pcall(function()
+    if vim.treesitter and vim.treesitter.language and vim.treesitter.language.get_lang then
+      return vim.treesitter.language.get_lang(filetype)
+    end
+    return nil
+  end)
+
+  if ok and is_non_empty_string(lang) then
+    return lang
+  end
+
+  return filetype
+end
+
 local function get_query_candidates(filetype)
   -- Providers may expose either:
   --   - `get_queries()` -> { "query v3", "query v2", ... } (preferred)
@@ -59,10 +80,11 @@ local function get_compiled_query(filetype)
 
   local candidates = get_query_candidates(filetype)
   local last_error = nil
+  local ts_lang = resolve_treesitter_language(filetype)
 
   for _, query_string in ipairs(candidates) do
     if is_non_empty_string(query_string) then
-      local ok, query_or_err = pcall(vim.treesitter.query.parse, filetype, query_string)
+      local ok, query_or_err = pcall(vim.treesitter.query.parse, ts_lang, query_string)
       if ok and query_or_err then
         M._compiled_queries[filetype] = query_or_err
         return query_or_err
@@ -245,7 +267,8 @@ function M.has_parser(filetype)
     return false
   end
 
-  local ok = pcall(vim.treesitter.get_string_parser, "", filetype)
+  local ts_lang = resolve_treesitter_language(filetype)
+  local ok = pcall(vim.treesitter.get_string_parser, "", ts_lang)
   return ok
 end
 
