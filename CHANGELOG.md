@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.5.0 - 2025-12-18
+
+- Add TSX (typescriptreact) React hook entries (`hook useX`) to the minimap (incl. destructuring/assignments).
+- Improve TSX Tree-sitter structural highlighting (captures const arrow-function declarations).
+- Pin minimap split to the tabpage edge for `side="left"` / `side="right"`.
+- Make focus keymap (`<leader>mf`) open the minimap if needed.
+- Add `return` entries for Swift/TypeScript/TSX.
+- Fix `reload.lua` to not override supported `filetypes` during hot-reload.
+
 ## 0.4.0 - 2025-12-17
 
 - Add bundled TypeScript (`typescript`) and TSX (`typescriptreact`) language providers.

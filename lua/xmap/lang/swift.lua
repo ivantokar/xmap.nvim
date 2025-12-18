@@ -31,6 +31,7 @@ M.default_symbol_keywords = {
   "let",
   "var",
   "subscript",
+  "return",
 }
 
 M.default_highlight_keywords = {
@@ -47,6 +48,7 @@ M.default_highlight_keywords = {
   "let",
   "var",
   "subscript",
+  "return",
 }
 
 local function ltrim(text)
@@ -280,6 +282,17 @@ function M.parse_symbol(line_text)
 
   if cleaned:match("^subscript%s*%(") then
     return { keyword = "subscript", capture_type = "function", display = "subscript" }
+  end
+
+  -- return statements (useful for quickly spotting exits/JSX returns)
+  if cleaned == "return" or cleaned:match("^return%f[%W]") then
+    local rest = vim.trim((cleaned:gsub("^return", "", 1)))
+    rest = vim.trim((rest:gsub(";+%s*$", "")))
+    local display = "return"
+    if rest ~= "" then
+      display = display .. " " .. rest
+    end
+    return { keyword = "return", capture_type = "function", display = display }
   end
 
   return nil

@@ -201,10 +201,12 @@ function M.create_window(bufnr)
 	local current_win = vim.api.nvim_get_current_win()
 
 	-- Create vertical split
-	if opts.side == "right" then
-		vim.cmd("rightbelow vsplit")
+	-- Use `botright`/`topleft` so the minimap stays pinned to the outer edge of the
+	-- tabpage layout (instead of splitting relative to the currently-focused window).
+	if opts.side == "left" then
+		vim.cmd("topleft vsplit")
 	else
-		vim.cmd("leftabove vsplit")
+		vim.cmd("botright vsplit")
 	end
 
 	local win = vim.api.nvim_get_current_win()

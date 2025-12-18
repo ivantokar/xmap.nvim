@@ -129,14 +129,22 @@ end
 
 -- Focus minimap window
 function M.focus()
-  if not minimap.is_open() then
-    vim.notify("Minimap is not open", vim.log.levels.WARN)
+  -- Lazy-initialize if user calls API before `setup()`.
+  if not M._initialized then
+    M.setup()
+  end
+
+  -- Focus should be a convenience: open the minimap if needed, then focus it.
+  if not (minimap.is_open() and minimap.state.winid and vim.api.nvim_win_is_valid(minimap.state.winid)) then
+    M.open()
+  end
+
+  -- Opening can fail (e.g. unsupported filetype), so check again.
+  if not (minimap.is_open() and minimap.state.winid and vim.api.nvim_win_is_valid(minimap.state.winid)) then
     return
   end
 
-  if minimap.state.winid then
-    navigation.focus_minimap(minimap.state.winid)
-  end
+  navigation.focus_minimap(minimap.state.winid)
 end
 
 -- Check if minimap is open
@@ -276,6 +284,6 @@ function M.diagnose()
 end
 
 -- Get plugin version
-M.version = "0.2.0"
+M.version = "0.5.0"
 
 return M

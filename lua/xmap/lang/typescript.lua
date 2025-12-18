@@ -20,6 +20,7 @@ M.default_symbol_keywords = {
   "let",
   "var",
   "property",
+  "return",
 }
 
 M.default_highlight_keywords = vim.deepcopy(M.default_symbol_keywords)
@@ -167,6 +168,17 @@ function M.parse_symbol(line_text)
   -- Ignore decorator lines (Angular/TS ecosystems)
   if cleaned:match("^@") then
     return nil
+  end
+
+  -- return statements
+  if cleaned == "return" or cleaned:match("^return%f[%W]") then
+    local rest = vim.trim((cleaned:gsub("^return", "", 1)))
+    rest = vim.trim((rest:gsub(";+%s*$", "")))
+    local display = "return"
+    if rest ~= "" then
+      display = display .. " " .. rest
+    end
+    return { keyword = "return", capture_type = "function", display = display }
   end
 
   -- class / interface / type / enum / namespace / module

@@ -48,7 +48,7 @@ M.groups = {
 	XmapRelativeUp = { link = "DiagnosticOk", bold = true, no_bg = true },
 	XmapRelativeDown = { link = "DiagnosticError", bold = true, no_bg = true },
 	XmapRelativeCurrent = { link = "DiagnosticWarn", bold = true, no_bg = true },
-	XmapRelativeNumber = { link = "CursorLineNr", bold = true, no_bg = true }, -- Brighter numbers by default
+	XmapRelativeNumber = { link = "CursorLineNr", bold = false, no_bg = true }, -- Brighter numbers by default
 	XmapRelativeKeyword = { link = "Keyword", bold = true, no_bg = true },
 	XmapRelativeEntity = { link = "Identifier", no_bg = true },
 

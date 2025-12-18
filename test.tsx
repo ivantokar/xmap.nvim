@@ -9,6 +9,12 @@ type Props = {
   count?: number
 }
 
+function useTitle(title: string) {
+  React.useEffect(() => {
+    document.title = title
+  }, [title])
+}
+
 export function Header({ title, count }: Props) {
   return (
     <header>
@@ -18,10 +24,21 @@ export function Header({ title, count }: Props) {
   )
 }
 
+export const MemoHeader = React.memo((p: Props) => {
+  return <Header title={p.title} count={p.count} />
+})
+
 export const App: React.FC<Props> = (props) => {
+  useTitle(props.title)
+
+  const [count, setCount] = React.useState(props.count ?? 0)
+  const doubled = React.useMemo(() => count * 2, [count])
+  const increment = React.useCallback(() => setCount((c) => c + 1), [])
+
   return (
     <main>
-      <Header title={props.title} count={props.count} />
+      <button onClick={increment}>Increment</button>
+      <Header title={props.title} count={doubled} />
     </main>
   )
 }
@@ -45,4 +62,3 @@ class Store {
     this.value = next
   }
 }
-

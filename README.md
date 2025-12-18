@@ -1,20 +1,22 @@
-# xmap.nvim (UNDER DEVELOPMENT)
+<p align="center">
+<img src="./xmap-logo.png" alt="An Xcode-style minimap for Neovim with full keyboard navigation and Tree-sitter integration. Navigate your code with a visual overview that respects your colorscheme." width="200">
+</p>
+
+# xmap.nvim
 
 An **Xcode-style minimap** for Neovim with full **keyboard navigation** and **Tree-sitter integration**. Navigate your code with a visual overview that respects your colorscheme.
 
-![xmap.nvim demo](https://via.placeholder.com/800x400?text=Screenshots+Coming+Soon)
-
 ## Features
 
-- 📍 **Visual Minimap**: Side-by-side overview of your entire buffer
-- ⌨️ **Keyboard-Only Navigation**: No mouse required - navigate with standard Vim motions
-- 🎯 **Smart Jump Indicators**: Colored arrows (🟢 up, 🔴 down) with distance and entity names
-- 🌳 **Tree-sitter Integration**: Smart structural highlighting with Nerd Font icons for functions, classes, and more
-- 🎨 **Colorscheme Aware**: Uses highlight groups - no hard-coded colors
-- ⚡ **Performance Optimized**: Throttled updates and efficient rendering
-- 🔧 **Fully Configurable**: Customize every aspect to fit your workflow
-- 🦾 **Swift + TypeScript**: Bundled providers with a pluggable language architecture
-- 🔍 **Compact Display**: Smaller font with icons for better space utilization
+- **Visual Minimap**: Side-by-side overview of your entire buffer
+- **Keyboard-Only Navigation**: No mouse required - navigate with standard Vim motions
+- **Smart Jump Indicators**: Colored arrows (🟢 up, 🔴 down) with distance and entity names
+- **Tree-sitter Integration**: Smart structural highlighting with Nerd Font icons for functions, classes, and more
+- **Colorscheme Aware**: Uses highlight groups - no hard-coded colors
+- **Performance Optimized**: Throttled updates and efficient rendering
+- **Fully Configurable**: Customize every aspect to fit your workflow
+- **Swift + TypeScript**: Bundled providers with a pluggable language architecture
+- **Compact Display**: Smaller font with icons for better space utilization
 
 ## Requirements
 
@@ -81,7 +83,7 @@ Here's the full default configuration:
 require("xmap").setup({
   -- Window settings
   width = 40,              -- Width of minimap window
-  side = "right",          -- "right" or "left"
+  side = "right",          -- "right" or "left" (pinned to tabpage edge)
   auto_open = false,       -- Auto-open for supported filetypes
 
   -- Supported filetypes
@@ -121,7 +123,7 @@ require("xmap").setup({
       highlight_keywords = {},
     },
     typescriptreact = {
-      keywords = {},          -- When empty, uses TypeScript defaults
+      keywords = {},          -- When empty, uses TSX defaults (TypeScript + React hooks)
       exclude = {},
       highlight_keywords = {},
     },
@@ -171,7 +173,7 @@ require("xmap").setup({
 **Global** (configurable via `keymaps` option):
 
 - `<leader>mm` - Toggle minimap
-- `<leader>mf` - Focus minimap
+- `<leader>mf` - Open/focus minimap
 
 **Inside Minimap** (configurable via `keymaps` option):
 

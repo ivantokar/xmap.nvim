@@ -27,7 +27,7 @@ end
 M.defaults = {
 	-- Window settings
 	width = 40, -- Width of the minimap window (for relative numbers + icons + text)
-	side = "right", -- "right" or "left"
+	side = "right", -- "right" or "left" (pinned to tabpage edge)
 	auto_open = false, -- Automatically open minimap for supported filetypes
 
 	-- Filetypes where minimap should be enabled
@@ -69,7 +69,7 @@ M.defaults = {
 			highlight_keywords = {},
 		},
 		typescriptreact = {
-			keywords = {}, -- When empty, uses the TypeScript provider defaults
+			keywords = {}, -- When empty, uses the TSX provider defaults (TypeScript + React hooks)
 			exclude = {},
 			highlight_keywords = {},
 		},
@@ -87,7 +87,7 @@ M.defaults = {
 		relative_prefix = {
 			-- Minimum width (in digits) for the distance column.
 			-- Distances are capped at 999 for consistent alignment.
-			number_width = 3,
+			number_width = 4,
 			-- Inserted between the number and the direction indicator.
 			-- Example: number_separator=" " produces `12 ↓`, number_separator="" produces `12↓`.
 			number_separator = " ",

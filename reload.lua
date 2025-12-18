@@ -27,11 +27,9 @@ local success, err = pcall(function()
   require("xmap").setup({
     width = 40, -- Wider to fit relative numbers + icons + text
     side = "right",
-    filetypes = { "swift" },
     treesitter = {
       enable = true,
       highlight_scopes = true,
-      languages = { "swift" },
     },
   })
 end)
