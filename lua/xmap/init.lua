@@ -284,6 +284,6 @@ function M.diagnose()
 end
 
 -- Get plugin version
-M.version = "0.5.0"
+M.version = "0.5.1"
 
 return M

@@ -122,6 +122,7 @@ M.state = {
 	-- Render caches
 	line_mapping = {}, -- minimap_line -> source_line mapping (both 1-indexed)
 	content_by_line = {}, -- minimap_line -> rendered content (without prefix)
+	entry_kinds = {}, -- minimap_line -> entry kind ("symbol", "comment", etc.)
 	structural_nodes = {}, -- Cached Tree-sitter nodes for structural highlighting
 	relative_prefix_settings = nil, -- Cached prefix config (widths, symbols, separators)
 
@@ -248,7 +249,7 @@ local COMMENT_ICON = treesitter.get_icon_for_type("comment")
 -- @param current_line number: Current base line in main buffer (1-indexed)
 -- @param all_lines table: All buffer lines (for context)
 -- @param ctx table: Rendering context (provider, enabled keywords, etc.)
--- @return string|nil, string|nil: Rendered line and content, or nil to skip this line
+-- @return string|nil, string|nil, string|nil: Rendered line, content, and entry kind (or nil)
 function M.render_line(line, line_nr, current_line, all_lines, ctx)
 	-- The minimap does not render every source line. A provider decides:
 	--   - which comment lines are worth showing (including MARK/TODO markers)
@@ -257,12 +258,14 @@ function M.render_line(line, line_nr, current_line, all_lines, ctx)
 	-- We return both:
 	--   1) the full rendered line (prefix + content)
 	--   2) the content portion only (used for fast prefix-only updates)
+	--   3) the entry kind (used for comment/symbol highlighting decisions)
 	if not ctx or not ctx.provider then
 		return nil
 	end
 
 	local trimmed = vim.trim(line)
 	local content = nil
+	local entry_kind = nil
 
 	if trimmed ~= "" and ctx.provider.is_comment_line and ctx.provider.is_comment_line(trimmed) then
 		-- Comments/markers are rendered as separate minimap entries with the comment icon.
@@ -275,9 +278,32 @@ function M.render_line(line, line_nr, current_line, all_lines, ctx)
 		end
 
 		if entry.kind == "marker" then
+			entry_kind = "marker"
 			content = "⚑ " .. entry.marker .. ": " .. (entry.text or "")
 		else
-			content = COMMENT_ICON .. " " .. (entry.text or "")
+			local comment_symbol = nil
+			if entry.kind == "commented_symbol" and entry.symbol then
+				comment_symbol = entry.symbol
+			elseif type(ctx.provider.extract_comment) == "function" and type(ctx.provider.parse_symbol) == "function" then
+				local _, _, _, raw_text = ctx.provider.extract_comment(line)
+				if raw_text and raw_text ~= "" then
+					comment_symbol = ctx.provider.parse_symbol(raw_text)
+				end
+			end
+
+			if comment_symbol and ctx.enabled_symbol_keywords and ctx.enabled_symbol_keywords[comment_symbol.keyword] then
+				local icon = treesitter.get_icon_for_type(comment_symbol.capture_type)
+				local compact = tostring(comment_symbol.display or ""):gsub("%s+", " ")
+				local max_len = (ctx.opts.render and ctx.opts.render.max_line_length) or 40
+				if #compact > max_len then
+					compact = compact:sub(1, max_len - 3) .. "..."
+				end
+				entry_kind = "commented_symbol"
+				content = COMMENT_ICON .. " " .. icon .. " " .. compact
+			else
+				entry_kind = "comment"
+				content = COMMENT_ICON .. " " .. (entry.text or "")
+			end
 		end
 	elseif type(ctx.provider.parse_symbol) == "function" then
 		-- Symbols are identified by a cheap line parser that extracts the declaration kind and name.
@@ -298,6 +324,7 @@ function M.render_line(line, line_nr, current_line, all_lines, ctx)
 			compact = compact:sub(1, max_len - 3) .. "..."
 		end
 
+		entry_kind = "symbol"
 		content = icon .. " " .. compact
 	else
 		return nil
@@ -308,18 +335,18 @@ function M.render_line(line, line_nr, current_line, all_lines, ctx)
 	end
 
 	local _, prefix = format_relative_prefix(line_nr, current_line, ctx.prefix_settings)
-	return prefix .. content, content
+	return prefix .. content, content, entry_kind
 end
 
 -- Render entire buffer content for minimap
 -- @param main_bufnr number: Main buffer to render
 -- @param main_winid number: Main window (to get current line)
 -- @param current_line_override number|nil: Optional base line override
--- @return string[], integer[], table, table, string[]:
---   rendered_lines, line_mapping, structural_nodes, prefix_settings, content_by_line
+-- @return string[], integer[], table, table, string[], string[]:
+--   rendered_lines, line_mapping, structural_nodes, prefix_settings, content_by_line, entry_kinds
 function M.render_buffer(main_bufnr, main_winid, current_line_override)
 	if not vim.api.nvim_buf_is_valid(main_bufnr) then
-		return {}, {}, {}, {}, {}
+		return {}, {}, {}, {}, {}, {}
 	end
 
 	local opts = config.get()
@@ -331,6 +358,7 @@ function M.render_buffer(main_bufnr, main_winid, current_line_override)
 	local lines = vim.api.nvim_buf_get_lines(main_bufnr, 0, -1, false)
 	local rendered = {}
 	local content_by_line = {}
+	local entry_kinds = {}
 	local line_mapping = {} -- Maps minimap line number to source line number
 	local structural_nodes = {}
 
@@ -339,7 +367,7 @@ function M.render_buffer(main_bufnr, main_winid, current_line_override)
 	local filetype = vim.api.nvim_buf_get_option(main_bufnr, "filetype")
 	local provider = lang.get(filetype)
 	if not provider then
-		return {}, {}, {}, {}, {}
+		return {}, {}, {}, {}, {}, {}
 	end
 
 	-- Tree-sitter is optional and used only for structural highlighting.
@@ -363,15 +391,16 @@ function M.render_buffer(main_bufnr, main_winid, current_line_override)
 	}
 
 	for i, line in ipairs(lines) do
-		local rendered_line, content = M.render_line(line, i, current_line, lines, ctx)
+		local rendered_line, content, entry_kind = M.render_line(line, i, current_line, lines, ctx)
 		if rendered_line then
 			table.insert(rendered, rendered_line)
 			table.insert(content_by_line, content or "")
+			table.insert(entry_kinds, entry_kind or "symbol")
 			table.insert(line_mapping, i) -- Store source line number
 		end
 	end
 
-	return rendered, line_mapping, structural_nodes, prefix_settings, content_by_line
+	return rendered, line_mapping, structural_nodes, prefix_settings, content_by_line, entry_kinds
 end
 
 -- Apply highlighting for relative numbers, arrows, icons, and comments
@@ -448,6 +477,7 @@ function M.apply_relative_number_highlighting(minimap_bufnr, main_bufnr, main_wi
 		if not source_line_nr then
 			goto continue
 		end
+		local entry_kind = M.state.entry_kinds and M.state.entry_kinds[minimap_line_nr]
 
 		local delta = source_line_nr - current_line
 
@@ -468,94 +498,81 @@ function M.apply_relative_number_highlighting(minimap_bufnr, main_bufnr, main_wi
 		local indicator_end = indicator_start + (indicator_field_lens[direction] or 0)
 		highlight.apply(minimap_bufnr, M.ns_syntax, hl_group, minimap_line_nr - 1, indicator_start, indicator_end)
 
-		-- Check for special comment markers (only highlight icon + marker name, leave text bold)
+		-- Check for special comment markers (highlight the entire marker line for visibility)
 		if line_text:match("⚑ MARK:") then
 			local icon_pos = line_text:find("⚑")
-			local marker_end = line_text:find(":", icon_pos)
-			if icon_pos and marker_end then
+			if icon_pos then
 				highlight.apply(
 					minimap_bufnr,
 					M.ns_syntax,
 					"XmapCommentMark",
 					minimap_line_nr - 1,
 					icon_pos - 1,
-					marker_end
+					-1
 				)
-				-- Make the rest of the line bold
-				highlight.apply(minimap_bufnr, M.ns_syntax, "XmapCommentBold", minimap_line_nr - 1, marker_end + 1, -1)
 			end
 		elseif line_text:match("⚑ TODO:") then
 			local icon_pos = line_text:find("⚑")
-			local marker_end = line_text:find(":", icon_pos)
-			if icon_pos and marker_end then
+			if icon_pos then
 				highlight.apply(
 					minimap_bufnr,
 					M.ns_syntax,
 					"XmapCommentTodo",
 					minimap_line_nr - 1,
 					icon_pos - 1,
-					marker_end
+					-1
 				)
-				highlight.apply(minimap_bufnr, M.ns_syntax, "XmapCommentBold", minimap_line_nr - 1, marker_end + 1, -1)
 			end
 		elseif line_text:match("⚑ FIXME:") then
 			local icon_pos = line_text:find("⚑")
-			local marker_end = line_text:find(":", icon_pos)
-			if icon_pos and marker_end then
+			if icon_pos then
 				highlight.apply(
 					minimap_bufnr,
 					M.ns_syntax,
 					"XmapCommentFixme",
 					minimap_line_nr - 1,
 					icon_pos - 1,
-					marker_end
+					-1
 				)
-				highlight.apply(minimap_bufnr, M.ns_syntax, "XmapCommentBold", minimap_line_nr - 1, marker_end + 1, -1)
 			end
 		elseif line_text:match("⚑ NOTE:") then
 			local icon_pos = line_text:find("⚑")
-			local marker_end = line_text:find(":", icon_pos)
-			if icon_pos and marker_end then
+			if icon_pos then
 				highlight.apply(
 					minimap_bufnr,
 					M.ns_syntax,
 					"XmapCommentNote",
 					minimap_line_nr - 1,
 					icon_pos - 1,
-					marker_end
+					-1
 				)
-				highlight.apply(minimap_bufnr, M.ns_syntax, "XmapCommentBold", minimap_line_nr - 1, marker_end + 1, -1)
 			end
 		elseif line_text:match("⚑ WARNING:") then
 			local icon_pos = line_text:find("⚑")
-			local marker_end = line_text:find(":", icon_pos)
-			if icon_pos and marker_end then
+			if icon_pos then
 				highlight.apply(
 					minimap_bufnr,
 					M.ns_syntax,
 					"XmapCommentWarning",
 					minimap_line_nr - 1,
 					icon_pos - 1,
-					marker_end
+					-1
 				)
-				highlight.apply(minimap_bufnr, M.ns_syntax, "XmapCommentBold", minimap_line_nr - 1, marker_end + 1, -1)
 			end
 		elseif line_text:match("⚑ BUG:") then
 			local icon_pos = line_text:find("⚑")
-			local marker_end = line_text:find(":", icon_pos)
-			if icon_pos and marker_end then
+			if icon_pos then
 				highlight.apply(
 					minimap_bufnr,
 					M.ns_syntax,
 					"XmapCommentBug",
 					minimap_line_nr - 1,
 					icon_pos - 1,
-					marker_end
+					-1
 				)
-				highlight.apply(minimap_bufnr, M.ns_syntax, "XmapCommentBold", minimap_line_nr - 1, marker_end + 1, -1)
 			end
 		else
-			-- Rendered comment lines start with a comment icon; highlight the entire comment content.
+			-- Rendered comment lines start with a comment icon; highlight accordingly.
 			local comment_icon = COMMENT_ICON
 			local comment_icon_pos = line_text:find(comment_icon, 1, true)
 			if comment_icon_pos then
@@ -572,8 +589,14 @@ function M.apply_relative_number_highlighting(minimap_bufnr, main_bufnr, main_wi
 						hl_group = "XmapCommentDoc"
 					end
 				end
-				highlight.apply(minimap_bufnr, M.ns_syntax, hl_group, minimap_line_nr - 1, comment_icon_pos - 1, -1)
-				goto continue
+
+				if entry_kind == "commented_symbol" then
+					local icon_end = comment_icon_pos - 1 + #comment_icon
+					highlight.apply(minimap_bufnr, M.ns_syntax, hl_group, minimap_line_nr - 1, comment_icon_pos - 1, icon_end)
+				else
+					highlight.apply(minimap_bufnr, M.ns_syntax, hl_group, minimap_line_nr - 1, comment_icon_pos - 1, -1)
+					goto continue
+				end
 			end
 
 			-- Try to highlight keywords on ALL lines, not just structural nodes
@@ -817,12 +840,13 @@ function M.update()
 
 	-- Render buffer content with relative line numbers
 	local current_line = get_relative_base_line(M.state.main_winid)
-	local rendered_lines, line_mapping, structural_nodes, prefix_settings, content_by_line =
+	local rendered_lines, line_mapping, structural_nodes, prefix_settings, content_by_line, entry_kinds =
 		M.render_buffer(M.state.main_bufnr, M.state.main_winid, current_line)
 
 	-- Store line mapping for navigation
 	M.state.line_mapping = line_mapping
 	M.state.content_by_line = content_by_line or {}
+	M.state.entry_kinds = entry_kinds or {}
 	M.state.structural_nodes = structural_nodes or {}
 	if prefix_settings then
 		M.state.relative_prefix_settings = prefix_settings
@@ -1112,6 +1136,7 @@ function M.close()
 	M.state.is_open = false
 	M.state.line_mapping = {}
 	M.state.content_by_line = {}
+	M.state.entry_kinds = {}
 	M.state.structural_nodes = {}
 	M.state.relative_prefix_settings = nil
 	M.state.navigation_anchor_line = nil

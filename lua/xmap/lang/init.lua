@@ -19,7 +19,7 @@
 --   - `parse_symbol(line_text)` -> { keyword, capture_type, display }|nil
 --   - `is_comment_line(trimmed_line)` -> boolean
 --   - `render_comment(line, line_nr, all_lines)` -> { kind, marker?, text? }|nil
---   - `extract_comment(line)` -> text|nil, marker|nil, is_doc_comment:boolean (optional helper)
+--   - `extract_comment(line)` -> text|nil, marker|nil, is_doc_comment:boolean, raw_text|nil (optional helper)
 --
 -- Adding a new language does not require touching any core modules:
 -- just add a provider file and list its filetype in `require("xmap").setup({ filetypes = {...} })`.

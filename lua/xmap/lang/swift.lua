@@ -28,8 +28,6 @@ M.default_symbol_keywords = {
   "extension",
   "typealias",
   "actor",
-  "let",
-  "var",
   "subscript",
   "return",
 }
@@ -45,8 +43,6 @@ M.default_highlight_keywords = {
   "extension",
   "typealias",
   "actor",
-  "let",
-  "var",
   "subscript",
   "return",
 }
@@ -347,7 +343,7 @@ end
 
 ---Extract comment text (remove markers, get first line only).
 ---@param line string
----@return string|nil, string|nil, boolean
+---@return string|nil, string|nil, boolean, string|nil
 function M.extract_comment(line)
   -- Extract a compact comment text suitable for minimap display:
   --   - remove comment markers (//, ///, /*, *)
@@ -390,11 +386,13 @@ function M.extract_comment(line)
     text = text:gsub("^BUG:%s*", "")
   end
 
+  local raw_text = text
+
   if #text > 35 then
     text = text:sub(1, 32) .. "..."
   end
 
-  return text, marker, is_doc_comment
+  return text, marker, is_doc_comment, raw_text
 end
 
 ---Render a comment entry for the minimap (no comment prefix).

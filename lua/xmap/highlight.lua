@@ -56,12 +56,12 @@ M.groups = {
 	XmapCommentNormal = { link = "Comment", no_bg = true }, -- Regular comments
 	XmapCommentDoc = { link = "SpecialComment", no_bg = true }, -- Doc comments (///)
 	XmapCommentBold = { bold = true, no_bg = true }, -- Bold text for marker descriptions
-	XmapCommentMark = { link = "SpecialComment", bold = true, no_bg = true }, -- MARK: marker
-	XmapCommentTodo = { link = "Todo", bold = true, no_bg = true }, -- TODO: marker
-	XmapCommentFixme = { link = "Error", bold = true, no_bg = true }, -- FIXME: marker
-	XmapCommentNote = { link = "SpecialComment", bold = true, no_bg = true }, -- NOTE: marker
+	XmapCommentMark = { link = "WarningMsg", bold = true, no_bg = true }, -- MARK: marker
+	XmapCommentTodo = { link = "WarningMsg", bold = true, no_bg = true }, -- TODO: marker
+	XmapCommentFixme = { link = "WarningMsg", bold = true, no_bg = true }, -- FIXME: marker
+	XmapCommentNote = { link = "WarningMsg", bold = true, no_bg = true }, -- NOTE: marker
 	XmapCommentWarning = { link = "WarningMsg", bold = true, no_bg = true }, -- WARNING: marker
-	XmapCommentBug = { link = "ErrorMsg", bold = true, no_bg = true }, -- BUG: marker
+	XmapCommentBug = { link = "WarningMsg", bold = true, no_bg = true }, -- BUG: marker
 }
 
 -- Fallback colors (used only if a linked group does not exist or resolves to empty).

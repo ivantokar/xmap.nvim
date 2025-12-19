@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.1 - 2025-12-19
+
+- Hide variable/property keywords from default symbol lists (unless they are functions).
+- Render commented-out declarations as symbol entries (comment icon + symbol icon).
+- Use warning highlights for MARK/TODO/FIXME/NOTE/WARNING/BUG marker lines.
+
 ## 0.5.0 - 2025-12-18
 
 - Add TSX (typescriptreact) React hook entries (`hook useX`) to the minimap (incl. destructuring/assignments).
