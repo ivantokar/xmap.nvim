@@ -17,7 +17,7 @@ local M = {}
 -- Bundled languages. Additional languages can be added by installing/creating a
 -- matching provider module under `lua/xmap/lang/<filetype>.lua` and adding the
 -- filetype to `filetypes` (and `treesitter.languages` if desired).
-local DEFAULT_FILETYPES = { "swift", "typescript", "typescriptreact" }
+local DEFAULT_FILETYPES = { "swift", "typescript", "typescriptreact", "markdown" }
 
 local function get_default_filetypes()
 	return vim.deepcopy(DEFAULT_FILETYPES)
@@ -70,6 +70,11 @@ M.defaults = {
 		},
 		typescriptreact = {
 			keywords = {}, -- When empty, uses the TSX provider defaults (TypeScript + React hooks)
+			exclude = {},
+			highlight_keywords = {},
+		},
+		markdown = {
+			keywords = {}, -- When empty, uses the Markdown provider defaults (H1-H6)
 			exclude = {},
 			highlight_keywords = {},
 		},

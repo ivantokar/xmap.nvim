@@ -38,6 +38,13 @@ M.groups = {
 	XmapComment = { link = "Comment" },
 	XmapString = { link = "String" },
 	XmapNumber = { link = "Number" },
+	XmapMarkdownH1 = { link = "DiagnosticError" },
+	XmapMarkdownH2 = { link = "DiagnosticWarn" },
+	XmapMarkdownH3 = { link = "DiagnosticOk" },
+	XmapMarkdownH4 = { link = "Comment" },
+	XmapMarkdownH5 = { link = "Comment" },
+	XmapMarkdownH6 = { link = "Comment" },
+	XmapMarkdownHeadingText = { link = "XmapText" },
 
 	-- Structural indicators
 	XmapScope = { link = "Title" },
@@ -77,6 +84,12 @@ local fallback_colors = {
 	XmapRelativeNumber = { fg = "#c0caf5", bold = true }, -- Bright
 	XmapRelativeKeyword = { fg = "#bb9af7", bold = true }, -- Purple (keywords)
 	XmapRelativeEntity = { fg = "#7dcfff" }, -- Cyan (entity names)
+	XmapMarkdownH1 = { fg = "#f7768e" }, -- Red
+	XmapMarkdownH2 = { fg = "#e0af68" }, -- Yellow
+	XmapMarkdownH3 = { fg = "#9ece6a" }, -- Green
+	XmapMarkdownH4 = { fg = "#565f89" }, -- Gray
+	XmapMarkdownH5 = { fg = "#565f89" }, -- Gray
+	XmapMarkdownH6 = { fg = "#565f89" }, -- Gray
 }
 
 local function is_empty(tbl)

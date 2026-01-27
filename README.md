@@ -15,7 +15,7 @@ An **Xcode-style minimap** for Neovim with full **keyboard navigation** and **Tr
 - **Colorscheme Aware**: Uses highlight groups - no hard-coded colors
 - **Performance Optimized**: Throttled updates and efficient rendering
 - **Fully Configurable**: Customize every aspect to fit your workflow
-- **Swift + TypeScript**: Bundled providers with a pluggable language architecture
+- **Swift + TypeScript + Markdown**: Bundled providers with a pluggable language architecture
 - **Compact Display**: Smaller font with icons for better space utilization
 
 ## Requirements
@@ -87,7 +87,7 @@ require("xmap").setup({
   auto_open = false,       -- Auto-open for supported filetypes
 
   -- Supported filetypes
-  filetypes = { "swift", "typescript", "typescriptreact" },
+  filetypes = { "swift", "typescript", "typescriptreact", "markdown" },
 
   -- Filetypes to exclude
   exclude_filetypes = {
@@ -107,7 +107,7 @@ require("xmap").setup({
   treesitter = {
     enable = true,                    -- Enable Tree-sitter
     highlight_scopes = true,          -- Highlight functions/classes
-    languages = { "swift", "typescript", "typescriptreact" },
+    languages = { "swift", "typescript", "typescriptreact", "markdown" },
   },
 
   -- Symbol filtering per language (keyed by filetype)
@@ -124,6 +124,11 @@ require("xmap").setup({
     },
     typescriptreact = {
       keywords = {},          -- When empty, uses TSX defaults (TypeScript + React hooks)
+      exclude = {},
+      highlight_keywords = {},
+    },
+    markdown = {
+      keywords = {},          -- When empty, uses Markdown defaults (H1-H6)
       exclude = {},
       highlight_keywords = {},
     },
@@ -232,7 +237,7 @@ xmap.nvim uses Tree-sitter to provide structural awareness and highlighting. Thi
 
 ### Supported Languages
 
-Bundled: **Swift**, **TypeScript**, **TypeScriptReact**.
+Bundled: **Swift**, **TypeScript**, **TypeScriptReact**, **Markdown**.
 
 To add another language later, add a provider module at `lua/xmap/lang/<filetype>.lua` and include the filetype in `filetypes` (and `treesitter.languages` if you want Tree-sitter highlighting).
 

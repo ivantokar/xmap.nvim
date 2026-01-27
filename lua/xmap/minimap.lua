@@ -123,6 +123,7 @@ M.state = {
 	line_mapping = {}, -- minimap_line -> source_line mapping (both 1-indexed)
 	content_by_line = {}, -- minimap_line -> rendered content (without prefix)
 	entry_kinds = {}, -- minimap_line -> entry kind ("symbol", "comment", etc.)
+	entry_symbols = {}, -- minimap_line -> parsed symbol metadata (if any)
 	structural_nodes = {}, -- Cached Tree-sitter nodes for structural highlighting
 	relative_prefix_settings = nil, -- Cached prefix config (widths, symbols, separators)
 
@@ -242,6 +243,14 @@ function M.create_window(bufnr)
 end
 
 local COMMENT_ICON = treesitter.get_icon_for_type("comment")
+local MARKDOWN_HEADING_HIGHLIGHTS = {
+	H1 = "XmapMarkdownH1",
+	H2 = "XmapMarkdownH2",
+	H3 = "XmapMarkdownH3",
+	H4 = "XmapMarkdownH4",
+	H5 = "XmapMarkdownH5",
+	H6 = "XmapMarkdownH6",
+}
 
 -- Render a single line for the minimap (language-driven structural overview)
 -- @param line string: Original line from main buffer
@@ -266,6 +275,7 @@ function M.render_line(line, line_nr, current_line, all_lines, ctx)
 	local trimmed = vim.trim(line)
 	local content = nil
 	local entry_kind = nil
+	local entry_symbol = nil
 
 	if trimmed ~= "" and ctx.provider.is_comment_line and ctx.provider.is_comment_line(trimmed) then
 		-- Comments/markers are rendered as separate minimap entries with the comment icon.
@@ -307,7 +317,7 @@ function M.render_line(line, line_nr, current_line, all_lines, ctx)
 		end
 	elseif type(ctx.provider.parse_symbol) == "function" then
 		-- Symbols are identified by a cheap line parser that extracts the declaration kind and name.
-		local symbol = ctx.provider.parse_symbol(trimmed)
+		local symbol = ctx.provider.parse_symbol(trimmed, line_nr, all_lines)
 		if not symbol then
 			return nil
 		end
@@ -317,7 +327,7 @@ function M.render_line(line, line_nr, current_line, all_lines, ctx)
 			return nil
 		end
 
-		local icon = treesitter.get_icon_for_type(symbol.capture_type)
+		local icon = symbol.icon or treesitter.get_icon_for_type(symbol.capture_type)
 		local compact = tostring(symbol.display or ""):gsub("%s+", " ")
 		local max_len = (ctx.opts.render and ctx.opts.render.max_line_length) or 40
 		if #compact > max_len then
@@ -325,7 +335,12 @@ function M.render_line(line, line_nr, current_line, all_lines, ctx)
 		end
 
 		entry_kind = "symbol"
-		content = icon .. " " .. compact
+		if icon and icon ~= "" then
+			content = icon .. " " .. compact
+		else
+			content = compact
+		end
+		entry_symbol = symbol
 	else
 		return nil
 	end
@@ -335,7 +350,7 @@ function M.render_line(line, line_nr, current_line, all_lines, ctx)
 	end
 
 	local _, prefix = format_relative_prefix(line_nr, current_line, ctx.prefix_settings)
-	return prefix .. content, content, entry_kind
+	return prefix .. content, content, entry_kind, entry_symbol
 end
 
 -- Render entire buffer content for minimap
@@ -343,7 +358,7 @@ end
 -- @param main_winid number: Main window (to get current line)
 -- @param current_line_override number|nil: Optional base line override
 -- @return string[], integer[], table, table, string[], string[]:
---   rendered_lines, line_mapping, structural_nodes, prefix_settings, content_by_line, entry_kinds
+--   rendered_lines, line_mapping, structural_nodes, prefix_settings, content_by_line, entry_kinds, entry_symbols
 function M.render_buffer(main_bufnr, main_winid, current_line_override)
 	if not vim.api.nvim_buf_is_valid(main_bufnr) then
 		return {}, {}, {}, {}, {}, {}
@@ -359,6 +374,7 @@ function M.render_buffer(main_bufnr, main_winid, current_line_override)
 	local rendered = {}
 	local content_by_line = {}
 	local entry_kinds = {}
+	local entry_symbols = {}
 	local line_mapping = {} -- Maps minimap line number to source line number
 	local structural_nodes = {}
 
@@ -367,7 +383,7 @@ function M.render_buffer(main_bufnr, main_winid, current_line_override)
 	local filetype = vim.api.nvim_buf_get_option(main_bufnr, "filetype")
 	local provider = lang.get(filetype)
 	if not provider then
-		return {}, {}, {}, {}, {}, {}
+		return {}, {}, {}, {}, {}, {}, {}
 	end
 
 	-- Tree-sitter is optional and used only for structural highlighting.
@@ -391,16 +407,17 @@ function M.render_buffer(main_bufnr, main_winid, current_line_override)
 	}
 
 	for i, line in ipairs(lines) do
-		local rendered_line, content, entry_kind = M.render_line(line, i, current_line, lines, ctx)
+		local rendered_line, content, entry_kind, entry_symbol = M.render_line(line, i, current_line, lines, ctx)
 		if rendered_line then
 			table.insert(rendered, rendered_line)
 			table.insert(content_by_line, content or "")
 			table.insert(entry_kinds, entry_kind or "symbol")
+			table.insert(entry_symbols, entry_symbol)
 			table.insert(line_mapping, i) -- Store source line number
 		end
 	end
 
-	return rendered, line_mapping, structural_nodes, prefix_settings, content_by_line, entry_kinds
+	return rendered, line_mapping, structural_nodes, prefix_settings, content_by_line, entry_kinds, entry_symbols
 end
 
 -- Apply highlighting for relative numbers, arrows, icons, and comments
@@ -599,6 +616,35 @@ function M.apply_relative_number_highlighting(minimap_bufnr, main_bufnr, main_wi
 				end
 			end
 
+			local entry_symbol = M.state.entry_symbols and M.state.entry_symbols[minimap_line_nr]
+			if filetype == "markdown" and entry_symbol and entry_symbol.keyword then
+				local heading_hl = MARKDOWN_HEADING_HIGHLIGHTS[entry_symbol.keyword]
+				if heading_hl then
+					local _, prefix = format_relative_prefix(source_line_nr, current_line, prefix_settings)
+					local icon = entry_symbol.icon or ""
+					local text_start = #prefix
+					if icon ~= "" then
+						local icon_end = #prefix + #icon
+						highlight.apply(minimap_bufnr, M.ns_syntax, heading_hl, minimap_line_nr - 1, #prefix, icon_end)
+						text_start = icon_end
+						if line_text:sub(icon_end + 1, icon_end + 1) == " " then
+							text_start = icon_end + 1
+						end
+					end
+					if text_start < #line_text then
+						highlight.apply(
+							minimap_bufnr,
+							M.ns_syntax,
+							"XmapMarkdownHeadingText",
+							minimap_line_nr - 1,
+							text_start,
+							-1
+						)
+					end
+					goto continue
+				end
+			end
+
 			-- Try to highlight keywords on ALL lines, not just structural nodes
 			-- Text format: " 22↓ 󰊕 func init"
 			-- Skip prefix and icons, then find the first letter
@@ -620,11 +666,21 @@ function M.apply_relative_number_highlighting(minimap_bufnr, main_bufnr, main_wi
 						local kw_pos_in_line = text_start - 1 + kw_start - 1 -- Position in full line (0-indexed)
 						local kw_end_pos_in_line = text_start - 1 + kw_end
 
+						local keyword_hl = "XmapRelativeKeyword"
+						local entity_hl = "XmapRelativeEntity"
+						if filetype == "markdown" then
+							local heading_hl = MARKDOWN_HEADING_HIGHLIGHTS[keyword]
+							if heading_hl then
+								keyword_hl = heading_hl
+								entity_hl = heading_hl
+							end
+						end
+
 						-- Highlight keyword with colorscheme color
 						highlight.apply(
 							minimap_bufnr,
 							M.ns_syntax,
-							"XmapRelativeKeyword",
+							keyword_hl,
 							minimap_line_nr - 1,
 							kw_pos_in_line,
 							kw_end_pos_in_line
@@ -636,7 +692,7 @@ function M.apply_relative_number_highlighting(minimap_bufnr, main_bufnr, main_wi
 							highlight.apply(
 								minimap_bufnr,
 								M.ns_syntax,
-								"XmapRelativeEntity",
+								entity_hl,
 								minimap_line_nr - 1,
 								entity_start,
 								-1
@@ -710,9 +766,16 @@ function M.apply_syntax_highlighting(minimap_bufnr, main_bufnr, structural_nodes
 		local source_line = node.start_line + 1 -- convert to 1-indexed
 		local minimap_line = line_lookup[source_line]
 		if minimap_line then
+			if filetype == "markdown" then
+				local entry_symbol = M.state.entry_symbols and M.state.entry_symbols[minimap_line]
+				if entry_symbol and entry_symbol.keyword and entry_symbol.keyword:match("^H[1-6]$") then
+					goto continue_node
+				end
+			end
 			local _, prefix = format_relative_prefix(source_line, current_line, prefix_settings)
 			highlight.apply(minimap_bufnr, M.ns_structure, hl_group, minimap_line - 1, #prefix, -1)
 		end
+		::continue_node::
 	end
 end
 
@@ -840,13 +903,14 @@ function M.update()
 
 	-- Render buffer content with relative line numbers
 	local current_line = get_relative_base_line(M.state.main_winid)
-	local rendered_lines, line_mapping, structural_nodes, prefix_settings, content_by_line, entry_kinds =
+	local rendered_lines, line_mapping, structural_nodes, prefix_settings, content_by_line, entry_kinds, entry_symbols =
 		M.render_buffer(M.state.main_bufnr, M.state.main_winid, current_line)
 
 	-- Store line mapping for navigation
 	M.state.line_mapping = line_mapping
 	M.state.content_by_line = content_by_line or {}
 	M.state.entry_kinds = entry_kinds or {}
+	M.state.entry_symbols = entry_symbols or {}
 	M.state.structural_nodes = structural_nodes or {}
 	if prefix_settings then
 		M.state.relative_prefix_settings = prefix_settings
@@ -1137,6 +1201,7 @@ function M.close()
 	M.state.line_mapping = {}
 	M.state.content_by_line = {}
 	M.state.entry_kinds = {}
+	M.state.entry_symbols = {}
 	M.state.structural_nodes = {}
 	M.state.relative_prefix_settings = nil
 	M.state.navigation_anchor_line = nil

@@ -16,7 +16,7 @@
 --   - `default_highlight_keywords` (string[]) keywords to highlight at line start.
 --   - `get_query()` (string) primary Tree-sitter query (optional).
 --   - `get_queries()` (string[]) query candidates (newest-first) for fallback parsing (optional).
---   - `parse_symbol(line_text)` -> { keyword, capture_type, display }|nil
+--   - `parse_symbol(line_text, line_nr?, all_lines?)` -> { keyword, capture_type, display, icon? }|nil
 --   - `is_comment_line(trimmed_line)` -> boolean
 --   - `render_comment(line, line_nr, all_lines)` -> { kind, marker?, text? }|nil
 --   - `extract_comment(line)` -> text|nil, marker|nil, is_doc_comment:boolean, raw_text|nil (optional helper)
