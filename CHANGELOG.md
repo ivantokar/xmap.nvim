@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.6.0 - 2026-01-27
+
+- Add bundled Markdown provider (`markdown`) with minimap entries for headings (ATX + Setext), fenced code blocks, images, links, and HTML tags.
+- Add Markdown heading highlight groups (`XmapMarkdownH1`-`XmapMarkdownH6`, `XmapMarkdownHeadingText`) and apply heading highlighting in the minimap.
+- Extend language providers: `parse_symbol(line_text, line_nr?, all_lines?)` and optional `icon` on returned symbol entries.
+
 ## 0.5.1 - 2025-12-19
 
 - Hide variable/property keywords from default symbol lists (unless they are functions).
