@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.7.0 - 2026-02-11
+
+- Add bundled Lua provider (`lua`) with minimap entries for function declarations (global, local, module methods), variable declarations, and return statements.
+- Support Lua comment detection and rendering (including TODO/FIXME/NOTE/WARNING/BUG/HACK markers).
+
 ## 0.6.0 - 2026-01-27
 
 - Add bundled Markdown provider (`markdown`) with minimap entries for headings (ATX + Setext), fenced code blocks, images, links, and HTML tags.
