@@ -3,8 +3,18 @@
 
 local M = {}
 
+-- TODO: Add error handling
+-- FIXME: Improve performance
+-- NOTE: This is a test file
+
 -- A simple variable
 local test_variable = "Hello, World!"
+local another_var = 42
+
+-- Global function
+function setup_global()
+  print("Global setup")
+end
 
 -- A function definition
 function M.setup(opts)
@@ -86,6 +96,48 @@ function M.process_buffer(bufnr, opts)
   end
 
   return processed
+end
+
+-- Arrow function style (module method)
+M.validate = function(input)
+  return input ~= nil
+end
+
+-- Another module method
+M.transform = function(data)
+  local result = {}
+  for k, v in pairs(data) do
+    result[k] = tostring(v)
+  end
+  return result
+end
+
+-- Local function
+local function helper_function(arg)
+  -- HACK: Quick workaround for testing
+  return arg * 2
+end
+
+-- Function with return statement
+function M.calculate(a, b)
+  if a > b then
+    return a - b
+  end
+  return b - a
+end
+
+-- WARNING: Deprecated function
+function M.old_method()
+  -- BUG: This doesn't work correctly
+  return nil
+end
+
+--- Documentation comment
+--- This is a documented function
+--- @param value any
+--- @return boolean
+function M.is_valid(value)
+  return value ~= nil and value ~= ""
 end
 
 -- Final return

@@ -15,7 +15,7 @@ An **Xcode-style minimap** for Neovim with full **keyboard navigation** and **Tr
 - **Colorscheme Aware**: Uses highlight groups - no hard-coded colors
 - **Performance Optimized**: Throttled updates and efficient rendering
 - **Fully Configurable**: Customize every aspect to fit your workflow
-- **Swift + TypeScript + Markdown**: Bundled providers with a pluggable language architecture
+- **Swift + TypeScript + Lua + Markdown**: Bundled providers with a pluggable language architecture
 - **Compact Display**: Smaller font with icons for better space utilization
 
 ## Requirements
@@ -87,7 +87,7 @@ require("xmap").setup({
   auto_open = false,       -- Auto-open for supported filetypes
 
   -- Supported filetypes
-  filetypes = { "swift", "typescript", "typescriptreact", "markdown" },
+  filetypes = { "swift", "typescript", "typescriptreact", "lua", "markdown" },
 
   -- Filetypes to exclude
   exclude_filetypes = {
@@ -107,7 +107,7 @@ require("xmap").setup({
   treesitter = {
     enable = true,                    -- Enable Tree-sitter
     highlight_scopes = true,          -- Highlight functions/classes
-    languages = { "swift", "typescript", "typescriptreact", "markdown" },
+    languages = { "swift", "typescript", "typescriptreact", "lua", "markdown" },
   },
 
   -- Symbol filtering per language (keyed by filetype)
@@ -124,6 +124,11 @@ require("xmap").setup({
     },
     typescriptreact = {
       keywords = {},          -- When empty, uses TSX defaults (TypeScript + React hooks)
+      exclude = {},
+      highlight_keywords = {},
+    },
+    lua = {
+      keywords = {},          -- When empty, uses Lua defaults
       exclude = {},
       highlight_keywords = {},
     },
@@ -237,7 +242,7 @@ xmap.nvim uses Tree-sitter to provide structural awareness and highlighting. Thi
 
 ### Supported Languages
 
-Bundled: **Swift**, **TypeScript**, **TypeScriptReact**, **Markdown**.
+Bundled: **Swift**, **TypeScript**, **TypeScriptReact**, **Lua**, **Markdown**.
 
 To add another language later, add a provider module at `lua/xmap/lang/<filetype>.lua` and include the filetype in `filetypes` (and `treesitter.languages` if you want Tree-sitter highlighting).
 
@@ -246,7 +251,7 @@ To add another language later, add a provider module at `lua/xmap/lang/<filetype
 Tree-sitter integration is enabled by default. Make sure you have the parsers installed:
 
 ```vim
-:TSInstall swift typescript tsx
+:TSInstall swift typescript tsx lua
 ```
 
 To disable Tree-sitter features:
@@ -437,4 +442,4 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 ---
 
-**Made with ❤️ for Swift/TypeScript developers and Vim enthusiasts**
+**Made with ❤️ for Swift/TypeScript/Lua developers and Vim enthusiasts**
