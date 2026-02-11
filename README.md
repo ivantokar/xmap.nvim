@@ -146,7 +146,7 @@ require("xmap").setup({
   -- Rendering options
   render = {
     relative_prefix = {
-      number_width = 3,
+      number_width = 4,
       number_separator = " ",
       separator = " ",
       direction = {
@@ -352,7 +352,6 @@ For very large files (10,000+ lines), consider:
 require("xmap").setup({
   render = {
     throttle_ms = 200,  -- Increase throttle
-    mode = "compact",   -- Use compact mode
   },
   treesitter = {
     highlight_scopes = false,  -- Disable structural highlighting
