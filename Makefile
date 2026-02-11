@@ -1,12 +1,24 @@
-.PHONY: test test-swift test-follow dev clean install-local
+.PHONY: test test-swift test-lua test-ts test-tsx test-follow dev clean install-local
 
-# Test with minimal config
+# Test with minimal config (default: Swift)
 test:
 	nvim -u test_config.lua test.swift
 
 # Test with Swift file
 test-swift:
 	nvim -u test_config.lua test.swift
+
+# Test with Lua file
+test-lua:
+	nvim -u test_config.lua test.lua
+
+# Test with TypeScript file
+test-ts:
+	nvim -u test_config.lua test.ts
+
+# Test with TSX file
+test-tsx:
+	nvim -u test_config.lua test.tsx
 
 # Headless QA regression checks
 test-follow:
@@ -38,6 +50,9 @@ help:
 	@echo ""
 	@echo "  make test        - Test with minimal config (test.swift)"
 	@echo "  make test-swift  - Test with Swift file"
+	@echo "  make test-lua    - Test with Lua file"
+	@echo "  make test-ts     - Test with TypeScript file"
+	@echo "  make test-tsx    - Test with TSX file"
 	@echo "  make dev         - Open for development with your config"
 	@echo "  make clean       - Clean generated files"
 	@echo "  make install-local - Show lazy.nvim local config"
