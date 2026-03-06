@@ -1,4 +1,5 @@
 -- lua/xmap/config.lua
+-- Copyright (c) Ivan Tokar. MIT License.
 -- Configuration management for xmap.nvim
 --
 -- Responsibilities:

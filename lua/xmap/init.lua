@@ -1,4 +1,5 @@
 -- lua/xmap/init.lua
+-- Copyright (c) Ivan Tokar. MIT License.
 -- Main API for xmap.nvim
 --
 -- This module is the public entry point used by users:

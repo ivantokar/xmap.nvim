@@ -1,4 +1,5 @@
 -- lua/xmap/symbols.lua
+-- Copyright (c) Ivan Tokar. MIT License.
 -- Keyword configuration helpers for xmap.nvim
 --
 -- This module centralizes "what keywords should be visible/highlighted" logic so the core

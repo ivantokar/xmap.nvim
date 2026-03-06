@@ -1,4 +1,5 @@
 -- lua/xmap/treesitter.lua
+-- Copyright (c) Ivan Tokar. MIT License.
 -- Tree-sitter integration for xmap.nvim
 --
 -- This module is intentionally small and generic:

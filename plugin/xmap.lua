@@ -1,4 +1,5 @@
 -- plugin/xmap.lua
+-- Copyright (c) Ivan Tokar. MIT License.
 -- Plugin loader for xmap.nvim
 --
 -- Neovim loads files in `plugin/` automatically on startup.

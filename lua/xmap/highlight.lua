@@ -1,4 +1,5 @@
 -- lua/xmap/highlight.lua
+-- Copyright (c) Ivan Tokar. MIT License.
 -- Highlight group management for xmap.nvim
 --
 -- Highlights are a big part of xmap's UX. The goals here are:

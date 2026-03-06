@@ -1,4 +1,5 @@
 -- lua/xmap/lang/typescript.lua
+-- Copyright (c) Ivan Tokar. MIT License.
 -- TypeScript language support for xmap.nvim
 --
 -- This provider implements a lightweight, line-based parser for common TypeScript

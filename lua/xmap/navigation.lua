@@ -1,4 +1,5 @@
 -- lua/xmap/navigation.lua
+-- Copyright (c) Ivan Tokar. MIT License.
 -- Navigation and jumping logic for xmap.nvim
 --
 -- This module is responsible for moving between the minimap and the main buffer.

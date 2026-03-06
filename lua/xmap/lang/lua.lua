@@ -1,4 +1,5 @@
 -- lua/xmap/lang/lua.lua
+-- Copyright (c) Ivan Tokar. MIT License.
 -- Lua language support for xmap.nvim
 --
 -- This provider implements Lua-specific logic required by the core minimap renderer:

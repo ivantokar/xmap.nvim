@@ -1,4 +1,5 @@
 -- lua/xmap/lang/markdown.lua
+-- Copyright (c) Ivan Tokar. MIT License.
 -- Markdown language support for xmap.nvim
 --
 -- Provides a minimal heading parser to build a TOC-style minimap for Markdown:

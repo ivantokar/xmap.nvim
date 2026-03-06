@@ -1,4 +1,5 @@
 -- lua/xmap/lang/typescriptreact.lua
+-- Copyright (c) Ivan Tokar. MIT License.
 -- TypeScript React (TSX) language support for xmap.nvim
 --
 -- Neovim uses `typescriptreact` as the filetype for `.tsx` files. Most of the parsing

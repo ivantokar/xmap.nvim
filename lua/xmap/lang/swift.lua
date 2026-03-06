@@ -1,4 +1,5 @@
 -- lua/xmap/lang/swift.lua
+-- Copyright (c) Ivan Tokar. MIT License.
 -- Swift language support for xmap.nvim
 --
 -- This provider implements Swift-specific logic required by the core minimap renderer:

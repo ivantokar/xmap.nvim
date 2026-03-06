@@ -441,4 +441,4 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 ---
 
-**Made with ❤️ for Swift/TypeScript/Lua developers and Vim enthusiasts**
+Created by [Ivan Tokar](https://github.com/ivantokar) · MIT License

@@ -1,4 +1,5 @@
 -- lua/xmap/minimap.lua
+-- Copyright (c) Ivan Tokar. MIT License.
 -- Minimap window and rendering logic for xmap.nvim
 --
 -- This is the core runtime module of the plugin. It owns:

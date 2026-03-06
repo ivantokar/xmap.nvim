@@ -1,4 +1,5 @@
 -- lua/xmap/lang/init.lua
+-- Copyright (c) Ivan Tokar. MIT License.
 -- Language provider registry for xmap.nvim.
 --
 -- This module is the "plug-in point" for language-specific logic.
