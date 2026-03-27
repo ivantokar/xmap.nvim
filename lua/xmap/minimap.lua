@@ -133,11 +133,49 @@ M.state = {
 	follow_scheduled = false, -- Coalesce follow-current-buffer updates
 }
 
+local function resolve_main_winid()
+	-- Recover the current window showing the attached main buffer.
+	-- This keeps cursor/relative-position updates working after window layout changes.
+	if not (M.state.main_bufnr and vim.api.nvim_buf_is_valid(M.state.main_bufnr)) then
+		return nil
+	end
+
+	local main_winid = M.state.main_winid
+	if
+		main_winid
+		and vim.api.nvim_win_is_valid(main_winid)
+		and vim.api.nvim_win_get_buf(main_winid) == M.state.main_bufnr
+	then
+		return main_winid
+	end
+
+	for _, winid in ipairs(vim.api.nvim_list_wins()) do
+		if winid ~= M.state.winid and vim.api.nvim_win_get_buf(winid) == M.state.main_bufnr then
+			M.state.main_winid = winid
+			return winid
+		end
+	end
+
+	M.state.main_winid = nil
+	return nil
+end
+
 local function get_relative_base_line(main_winid)
 	-- While the minimap is focused we can optionally "anchor" the base line so the
 	-- relative numbers don't constantly shift under the cursor during navigation.
 	-- This makes the minimap feel more like a stable list.
-	local current_line = navigation.get_main_cursor_line(main_winid)
+	local resolved_main_winid = main_winid
+	if
+		not (
+			resolved_main_winid
+			and vim.api.nvim_win_is_valid(resolved_main_winid)
+			and vim.api.nvim_win_get_buf(resolved_main_winid) == M.state.main_bufnr
+		)
+	then
+		resolved_main_winid = resolve_main_winid()
+	end
+
+	local current_line = navigation.get_main_cursor_line(resolved_main_winid)
 	if not (M.state.navigation_anchor_line and M.state.winid and vim.api.nvim_win_is_valid(M.state.winid)) then
 		return current_line
 	end
@@ -816,11 +854,14 @@ function M.update_relative_only()
 		return
 	end
 
-	if not (M.state.main_winid and vim.api.nvim_win_is_valid(M.state.main_winid)) then
+	local main_winid = resolve_main_winid()
+	if not main_winid then
+		-- Try to recover target tracking on the next event tick.
+		M.follow_current_target()
 		return
 	end
 
-	local current_line = get_relative_base_line(M.state.main_winid)
+	local current_line = get_relative_base_line(main_winid)
 	local prefix_settings = M.state.relative_prefix_settings or build_relative_prefix_settings(config.get())
 	local existing_lines = vim.api.nvim_buf_get_lines(M.state.bufnr, 0, -1, false)
 
@@ -854,7 +895,7 @@ function M.update_relative_only()
 	highlight.clear(M.state.bufnr, M.ns_cursor)
 	-- Structural highlights are re-applied too because they start *after* the prefix.
 	M.apply_syntax_highlighting(M.state.bufnr, M.state.main_bufnr, M.state.structural_nodes, current_line, prefix_settings)
-	M.apply_relative_number_highlighting(M.state.bufnr, M.state.main_bufnr, M.state.main_winid, current_line)
+	M.apply_relative_number_highlighting(M.state.bufnr, M.state.main_bufnr, main_winid, current_line)
 
 	if M.state.winid and vim.api.nvim_win_is_valid(M.state.winid) then
 		local is_minimap_focused = vim.api.nvim_get_current_win() == M.state.winid
@@ -902,10 +943,17 @@ function M.update()
 		return
 	end
 
+	local main_winid = resolve_main_winid()
+	if not main_winid then
+		-- Main window may have been replaced; request a follow pass and retry later.
+		M.follow_current_target()
+		return
+	end
+
 	-- Render buffer content with relative line numbers
-	local current_line = get_relative_base_line(M.state.main_winid)
+	local current_line = get_relative_base_line(main_winid)
 	local rendered_lines, line_mapping, structural_nodes, prefix_settings, content_by_line, entry_kinds, entry_symbols =
-		M.render_buffer(M.state.main_bufnr, M.state.main_winid, current_line)
+		M.render_buffer(M.state.main_bufnr, main_winid, current_line)
 
 	-- Store line mapping for navigation
 	M.state.line_mapping = line_mapping
@@ -926,19 +974,17 @@ function M.update()
 	highlight.clear(M.state.bufnr, M.ns_viewport)
 	highlight.clear(M.state.bufnr, M.ns_cursor)
 	M.apply_syntax_highlighting(M.state.bufnr, M.state.main_bufnr, structural_nodes, current_line, prefix_settings)
-	M.apply_relative_number_highlighting(M.state.bufnr, M.state.main_bufnr, M.state.main_winid, current_line)
+	M.apply_relative_number_highlighting(M.state.bufnr, M.state.main_bufnr, main_winid, current_line)
 
 	-- Update minimap cursor to follow main buffer
-	if M.state.main_winid and vim.api.nvim_win_is_valid(M.state.main_winid) then
-		local main_line = navigation.get_main_cursor_line(M.state.main_winid)
-		if M.state.winid and vim.api.nvim_win_is_valid(M.state.winid) then
-			local is_minimap_focused = vim.api.nvim_get_current_win() == M.state.winid
-			if not is_minimap_focused then
-				navigation.update_minimap_cursor(M.state.winid, main_line, M.state.line_mapping)
-			end
-			local minimap_line = vim.api.nvim_win_get_cursor(M.state.winid)[1]
-			M.highlight_cursor_line(M.state.bufnr, minimap_line)
+	local main_line = navigation.get_main_cursor_line(main_winid)
+	if M.state.winid and vim.api.nvim_win_is_valid(M.state.winid) then
+		local is_minimap_focused = vim.api.nvim_get_current_win() == M.state.winid
+		if not is_minimap_focused then
+			navigation.update_minimap_cursor(M.state.winid, main_line, M.state.line_mapping)
 		end
+		local minimap_line = vim.api.nvim_win_get_cursor(M.state.winid)[1]
+		M.highlight_cursor_line(M.state.bufnr, minimap_line)
 	end
 
 	M.state.last_update = vim.loop.now()
@@ -1224,11 +1270,24 @@ function M.setup_autocommands()
 	-- the minimap attaches to a different buffer.
 	local augroup = vim.api.nvim_create_augroup("XmapUpdate", { clear = true })
 
+	local function sync_main_window_from_event()
+		local current_winid = vim.api.nvim_get_current_win()
+		if
+			current_winid
+			and vim.api.nvim_win_is_valid(current_winid)
+			and M.state.main_bufnr
+			and vim.api.nvim_win_get_buf(current_winid) == M.state.main_bufnr
+		then
+			M.state.main_winid = current_winid
+		end
+	end
+
 	-- Update on text changes
 	vim.api.nvim_create_autocmd({ "TextChanged", "TextChangedI" }, {
 		group = augroup,
 		buffer = M.state.main_bufnr,
 		callback = function()
+			sync_main_window_from_event()
 			M.throttled_update()
 		end,
 	})
@@ -1238,6 +1297,8 @@ function M.setup_autocommands()
 		group = augroup,
 		buffer = M.state.main_bufnr,
 		callback = function()
+			sync_main_window_from_event()
+
 			-- Use the fast prefix-only update if we already have a mapping.
 			if
 				M.state.bufnr
@@ -1261,12 +1322,13 @@ function M.setup_autocommands()
 		callback = function()
 			if M.state.bufnr and M.state.winid and vim.api.nvim_win_is_valid(M.state.winid) then
 				local opts = config.get()
+				local main_winid = resolve_main_winid()
 				if
 					opts.navigation.follow_cursor
-					and M.state.main_winid
-					and vim.api.nvim_win_is_valid(M.state.main_winid)
+					and main_winid
+					and vim.api.nvim_win_is_valid(main_winid)
 				then
-					M.state.navigation_anchor_line = navigation.get_main_cursor_line(M.state.main_winid)
+					M.state.navigation_anchor_line = navigation.get_main_cursor_line(main_winid)
 				else
 					M.state.navigation_anchor_line = nil
 				end
@@ -1286,11 +1348,12 @@ function M.setup_autocommands()
 
 				local opts = config.get()
 				if opts.navigation.follow_cursor and vim.api.nvim_get_current_win() == M.state.winid then
-					if M.state.main_bufnr and M.state.main_winid then
+					local main_winid = resolve_main_winid()
+					if M.state.main_bufnr and main_winid then
 						navigation.center_main_on_minimap_cursor(
 							M.state.winid,
 							M.state.main_bufnr,
-							M.state.main_winid,
+							main_winid,
 							M.state.line_mapping
 						)
 					end
@@ -1310,11 +1373,13 @@ function M.setup_autocommands()
 			if not (M.state.winid and vim.api.nvim_win_is_valid(M.state.winid)) then
 				return
 			end
-			if not (M.state.main_winid and vim.api.nvim_win_is_valid(M.state.main_winid)) then
+
+			local main_winid = resolve_main_winid()
+			if not (main_winid and vim.api.nvim_win_is_valid(main_winid)) then
 				return
 			end
 
-			local main_line = navigation.get_main_cursor_line(M.state.main_winid)
+			local main_line = navigation.get_main_cursor_line(main_winid)
 			navigation.update_minimap_cursor(M.state.winid, main_line, M.state.line_mapping)
 			local minimap_line = vim.api.nvim_win_get_cursor(M.state.winid)[1]
 			M.highlight_cursor_line(M.state.bufnr, minimap_line)
@@ -1330,6 +1395,7 @@ function M.setup_autocommands()
 		group = augroup,
 		buffer = M.state.main_bufnr,
 		callback = function()
+			sync_main_window_from_event()
 			M.update()
 		end,
 	})
