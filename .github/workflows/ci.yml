@@ -1,0 +1,63 @@
+name: ci
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lua-format:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Stylua
+        uses: JohnnyMorganz/stylua-action@v4
+        with:
+          version: latest
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check Lua formatting
+        run: stylua --check $(git ls-files '*.lua')
+
+  smoke-tests:
+    name: smoke-tests (${{ matrix.neovim }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        neovim:
+          - stable
+          - nightly
+    continue-on-error: ${{ matrix.neovim == 'nightly' }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Neovim
+        uses: rhysd/action-setup-vim@v1
+        with:
+          neovim: ${{ matrix.neovim }}
+
+      - name: Show versions
+        run: |
+          nvim --version | head -n 5
+          make --version | head -n 1
+
+      - name: Run headless regression test
+        run: make test-follow
+
+      - name: Run multi-language headless smoke checks
+        run: nvim --headless -n -i NONE -u test_config.lua -c "lua dofile('scripts/qa_smoke_languages.lua')"

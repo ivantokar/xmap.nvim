@@ -4,6 +4,10 @@
 
 # xmap.nvim
 
+[![ci](https://github.com/ivantokar/xmap.nvim/actions/workflows/ci.yml/badge.svg)](https://github.com/ivantokar/xmap.nvim/actions/workflows/ci.yml)
+[![sast](https://github.com/ivantokar/xmap.nvim/actions/workflows/sast.yml/badge.svg)](https://github.com/ivantokar/xmap.nvim/actions/workflows/sast.yml)
+[![release](https://github.com/ivantokar/xmap.nvim/actions/workflows/release.yml/badge.svg)](https://github.com/ivantokar/xmap.nvim/actions/workflows/release.yml)
+
 An **Xcode-style minimap** for Neovim with full **keyboard navigation** and **Tree-sitter integration**. Navigate your code with a visual overview that respects your colorscheme.
 
 ## Features
@@ -428,6 +432,13 @@ Contributions are welcome! Feel free to:
 - Submit pull requests
 - Improve documentation
 - Add language providers for more languages
+
+Please read:
+
+- [CONTRIBUTING.md](CONTRIBUTING.md)
+- [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)
+- [SECURITY.md](SECURITY.md)
+- [docs/OSS_CHECKLIST.md](docs/OSS_CHECKLIST.md)
 
 ## License
 

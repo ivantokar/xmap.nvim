@@ -1,0 +1,65 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag (example: v1.2.3)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  github-release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve release tag
+        id: release_tag
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            TAG="${{ inputs.tag }}"
+          else
+            TAG="${GITHUB_REF_NAME}"
+          fi
+
+          if [[ ! "${TAG}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Tag must match vX.Y.Z"
+            exit 1
+          fi
+
+          echo "tag=${TAG}" >> "${GITHUB_OUTPUT}"
+          echo "version=${TAG#v}" >> "${GITHUB_OUTPUT}"
+
+      - name: Validate tag exists in repository
+        run: |
+          if ! git rev-parse "${{ steps.release_tag.outputs.tag }}" >/dev/null 2>&1; then
+            echo "Tag ${{ steps.release_tag.outputs.tag }} does not exist in this repository."
+            echo "Create and push the tag before running a manual release."
+            exit 1
+          fi
+
+      - name: Validate changelog contains release entry
+        run: |
+          VERSION="${{ steps.release_tag.outputs.version }}"
+          if ! grep -q "^## ${VERSION} - " CHANGELOG.md; then
+            echo "CHANGELOG.md is missing an entry for ${VERSION}"
+            exit 1
+          fi
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.release_tag.outputs.tag }}
+          generate_release_notes: true
+          name: ${{ steps.release_tag.outputs.tag }}
