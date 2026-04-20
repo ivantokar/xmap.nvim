@@ -1,0 +1,43 @@
+name: Bug report
+description: Report a reproducible problem in xmap.nvim
+title: "bug: "
+labels:
+  - bug
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What happened?
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction steps
+      description: Share exact steps and a minimal config.
+      placeholder: |
+        1. Start nvim with ...
+        2. Run :XmapToggle
+        3. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      placeholder: |
+        - OS:
+        - Neovim version (`nvim --version`):
+        - Terminal:
+    validations:
+      required: true

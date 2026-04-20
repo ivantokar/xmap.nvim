@@ -1,0 +1,40 @@
+name: ci
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  smoke-tests:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Neovim
+        uses: rhysd/action-setup-vim@v1
+        with:
+          neovim: true
+          version: stable
+
+      - name: Show versions
+        run: |
+          nvim --version | head -n 5
+          make --version | head -n 1
+
+      - name: Run headless regression test
+        run: make test-follow
+
+      - name: Run multi-language headless smoke checks
+        run: nvim --headless -n -i NONE -u test_config.lua -c "lua dofile('scripts/qa_smoke_languages.lua')"
