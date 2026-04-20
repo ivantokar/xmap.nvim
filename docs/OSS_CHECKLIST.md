@@ -11,29 +11,30 @@ This repository now includes baseline OSS hygiene:
 - ✅ Dependabot for GitHub Actions
 - ✅ CI (Neovim smoke) and release workflows
 
-## Branch protection for `main`
+## Ruleset protection for `main`
 
-Protection config is stored at:
+Ruleset config is stored at:
 
-- `.github/branch-protection/main.json`
+- `.github/rulesets/protect-main.json`
 
 Apply it with:
 
 ```bash
-.github/scripts/configure-branch-protection.sh
+.github/scripts/configure-ruleset.sh
 ```
 
 This enforces common OSS defaults:
 
 - required checks (`smoke-tests`)
 - up-to-date branch before merge
-- 1 approving review
-- code owner review
+- PR flow with no mandatory approvers (good default for solo-maintainer OSS)
 - stale review dismissal
 - conversation resolution
 - no force-push / no delete
 - linear history
-- apply to admins too
+- repo admins can bypass
+
+Legacy `main` branch protection should stay disabled when rulesets are active, to avoid double enforcement.
 
 ## Release process
 
