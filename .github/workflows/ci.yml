@@ -27,9 +27,7 @@ jobs:
         with:
           version: latest
           token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Check Lua formatting
-        run: stylua --check $(git ls-files '*.lua')
+          args: --check .
 
   smoke-tests:
     runs-on: ubuntu-latest
@@ -41,7 +39,8 @@ jobs:
       - name: Setup Neovim
         uses: rhysd/action-setup-vim@v1
         with:
-          neovim: stable
+          neovim: true
+          version: stable
 
       - name: Show versions
         run: |
