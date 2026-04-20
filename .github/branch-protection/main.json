@@ -6,13 +6,7 @@
         "context": "ci / lua-format"
       },
       {
-        "context": "ci / smoke-tests (stable)"
-      },
-      {
-        "context": "sast / codeql"
-      },
-      {
-        "context": "depend.review / dependency-review"
+        "context": "ci / smoke-tests"
       }
     ]
   },

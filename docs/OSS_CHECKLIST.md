@@ -9,7 +9,7 @@ This repository now includes baseline OSS hygiene:
 - ✅ `CODEOWNERS`
 - ✅ Issue + PR templates
 - ✅ Dependabot for GitHub Actions
-- ✅ CI (format + Neovim matrix smoke), SAST, dependency review, and release workflows
+- ✅ CI (format + Neovim smoke) and release workflows
 
 ## Branch protection for `main`
 
@@ -25,7 +25,7 @@ Apply it with:
 
 This enforces common OSS defaults:
 
-- required checks (`ci / lua-format`, `ci / smoke-tests (stable)`, `sast`, `depend.review`)
+- required checks (`ci / lua-format`, `ci / smoke-tests`)
 - up-to-date branch before merge
 - 1 approving review
 - code owner review

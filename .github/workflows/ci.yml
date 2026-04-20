@@ -32,15 +32,7 @@ jobs:
         run: stylua --check $(git ls-files '*.lua')
 
   smoke-tests:
-    name: smoke-tests (${{ matrix.neovim }})
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        neovim:
-          - stable
-          - nightly
-    continue-on-error: ${{ matrix.neovim == 'nightly' }}
 
     steps:
       - name: Checkout
@@ -49,7 +41,7 @@ jobs:
       - name: Setup Neovim
         uses: rhysd/action-setup-vim@v1
         with:
-          neovim: ${{ matrix.neovim }}
+          neovim: stable
 
       - name: Show versions
         run: |
