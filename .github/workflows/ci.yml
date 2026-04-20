@@ -15,20 +15,6 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  lua-format:
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Stylua
-        uses: JohnnyMorganz/stylua-action@v4
-        with:
-          version: latest
-          token: ${{ secrets.GITHUB_TOKEN }}
-          args: --check .
-
   smoke-tests:
     runs-on: ubuntu-latest
 

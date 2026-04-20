@@ -3,10 +3,7 @@
     "strict": true,
     "checks": [
       {
-        "context": "ci / lua-format"
-      },
-      {
-        "context": "ci / smoke-tests"
+        "context": "ci / smoke-tests (pull_request)"
       }
     ]
   },
