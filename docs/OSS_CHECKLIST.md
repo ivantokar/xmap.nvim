@@ -25,7 +25,7 @@ Apply it with:
 
 This enforces common OSS defaults:
 
-- required checks (`ci / smoke-tests (pull_request)`)
+- required checks (`smoke-tests`)
 - up-to-date branch before merge
 - 1 approving review
 - code owner review

@@ -3,7 +3,7 @@
     "strict": true,
     "checks": [
       {
-        "context": "ci / smoke-tests (pull_request)"
+        "context": "smoke-tests"
       }
     ]
   },
