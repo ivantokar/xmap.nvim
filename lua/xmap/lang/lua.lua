@@ -1,14 +1,14 @@
--- lua/xmap/lang/lua.lua
--- Copyright (c) Ivan Tokar. MIT License.
--- Lua language support for xmap.nvim
+-- AI HINTS: lua/xmap/lang/lua.lua
+-- AI HINTS: Copyright (c) Ivan Tokar. MIT License.
+-- AI HINTS: Lua language support for xmap.nvim
 --
--- This provider implements Lua-specific logic required by the core minimap renderer:
---   - A set of default declaration keywords to show in the minimap (function/local function/...)
---   - A Tree-sitter query to obtain structural node ranges for highlighting
---   - A lightweight line-based parser (`parse_symbol`) that turns a source line into:
---       { keyword = "...", capture_type = "...", display = "..." }
---     where `capture_type` matches the generic icon/highlight maps in `treesitter.lua`.
---   - Comment detection and rendering (including TODO/FIXME style markers)
+-- AI HINTS: This provider implements Lua-specific logic required by the core minimap renderer:
+-- AI HINTS: - A set of default declaration keywords to show in the minimap (function/local function/...)
+-- AI HINTS: - A Tree-sitter query to obtain structural node ranges for highlighting
+-- AI HINTS: - A lightweight line-based parser (`parse_symbol`) that turns a source line into:
+-- AI HINTS: { keyword = "...", capture_type = "...", display = "..." }
+-- AI HINTS: where `capture_type` matches the generic icon/highlight maps in `treesitter.lua`.
+-- AI HINTS: - Comment detection and rendering (including TODO/FIXME style markers)
 
 local M = {}
 
@@ -25,7 +25,7 @@ local function ltrim(text)
 end
 
 local QUERY_VARIANTS = {
-  -- Modern Lua parser
+  -- AI HINTS: Modern Lua parser
   [[
     (function_declaration) @function
     (local_function) @function
@@ -33,35 +33,35 @@ local QUERY_VARIANTS = {
     (variable_declaration) @variable
   ]],
 
-  -- Minimal fallback
+  -- AI HINTS: Minimal fallback
   [[
     (function_declaration) @function
     (local_function) @function
   ]],
 }
 
----Get Tree-sitter query candidates for Lua (newest-first).
----@return string[]
+-- AI HINTS: -Get Tree-sitter query candidates for Lua (newest-first).
+-- AI HINTS: -@return string[]
 function M.get_queries()
   return QUERY_VARIANTS
 end
 
----Get the primary Tree-sitter query string for Lua.
----@return string
+-- AI HINTS: -Get the primary Tree-sitter query string for Lua.
+-- AI HINTS: -@return string
 function M.get_query()
   return QUERY_VARIANTS[1]
 end
 
----Parse a Lua declaration line into a symbol item.
----@param line_text string
----@return {keyword:string, capture_type:string, display:string}|nil
+-- AI HINTS: -Parse a Lua declaration line into a symbol item.
+-- AI HINTS: -@param line_text string
+-- AI HINTS: -@return {keyword:string, capture_type:string, display:string}|nil
 function M.parse_symbol(line_text)
   local cleaned = ltrim(line_text or "")
   if cleaned == "" then
     return nil
   end
 
-  -- return statements
+  -- AI HINTS: return statements
   if cleaned == "return" or cleaned:match("^return%f[%W]") then
     local rest = vim.trim((cleaned:gsub("^return", "", 1)))
     local display = "return"
@@ -71,7 +71,7 @@ function M.parse_symbol(line_text)
     return { keyword = "return", capture_type = "function", display = display }
   end
 
-  -- local function declarations: `local function foo(...)`
+  -- AI HINTS: local function declarations: `local function foo(...)`
   do
     local name = cleaned:match("^local%s+function%s+([%w_%.]+)")
     if name then
@@ -79,7 +79,7 @@ function M.parse_symbol(line_text)
     end
   end
 
-  -- global function declarations: `function foo(...)` or `function module.foo(...)`
+  -- AI HINTS: global function declarations: `function foo(...)` or `function module.foo(...)`
   do
     local name = cleaned:match("^function%s+([%w_%.]+)")
     if name then
@@ -87,11 +87,11 @@ function M.parse_symbol(line_text)
     end
   end
 
-  -- local variable declarations: `local foo = ...` or `local foo, bar = ...`
+  -- AI HINTS: local variable declarations: `local foo = ...` or `local foo, bar = ...`
   do
     local names = cleaned:match("^local%s+([%w_,%s]+)%s*=")
     if names then
-      -- Extract first variable name
+      -- AI HINTS: Extract first variable name
       local first_name = names:match("^([%w_]+)")
       if first_name then
         return { keyword = "local", capture_type = "variable", display = "local " .. first_name }
@@ -99,7 +99,7 @@ function M.parse_symbol(line_text)
     end
   end
 
-  -- Module table assignments: `M.foo = function(...)` or `module.foo = function(...)`
+  -- AI HINTS: Module table assignments: `M.foo = function(...)` or `module.foo = function(...)`
   do
     local name = cleaned:match("^([%w_]+%.[%w_]+)%s*=%s*function%s*%(")
     if name then
@@ -107,7 +107,7 @@ function M.parse_symbol(line_text)
     end
   end
 
-  -- Table field function assignments: `foo = function(...)`
+  -- AI HINTS: Table field function assignments: `foo = function(...)`
   do
     local name = cleaned:match("^([%w_]+)%s*=%s*function%s*%(")
     if name then
@@ -118,24 +118,24 @@ function M.parse_symbol(line_text)
   return nil
 end
 
----Check if a line is a comment line in Lua.
----@param trimmed string
----@return boolean
+-- AI HINTS: -Check if a line is a comment line in Lua.
+-- AI HINTS: -@param trimmed string
+-- AI HINTS: -@return boolean
 function M.is_comment_line(trimmed)
-  -- Lua supports:
-  --   - line comments: --
-  --   - block comments: --[[ ... ]]
-  --   - block comment continuation lines starting with --
+  -- AI HINTS: Lua supports:
+  -- AI HINTS: - line comments: --
+  -- AI HINTS: - block comments: --[[ ... ]]
+  -- AI HINTS: - block comment continuation lines starting with --
   return trimmed:match("^%-%-") ~= nil
 end
 
----Detect file header comments to reduce noise.
----@param lines string[]
----@param line_nr integer 1-indexed
----@return boolean
+-- AI HINTS: -Detect file header comments to reduce noise.
+-- AI HINTS: -@param lines string[]
+-- AI HINTS: -@param line_nr integer 1-indexed
+-- AI HINTS: -@return boolean
 function M.is_file_header(lines, line_nr)
-  -- File header blocks (license banners, generated comments) can dominate the minimap.
-  -- We detect "a run of >=3 comment lines at the top of the file" and suppress them.
+  -- AI HINTS: File header blocks (license banners, generated comments) can dominate the minimap.
+  -- AI HINTS: We detect "a run of >=3 comment lines at the top of the file" and suppress them.
   if line_nr > 50 then
     return false
   end
@@ -164,14 +164,14 @@ function M.is_file_header(lines, line_nr)
   return comment_count >= 3 and line_nr <= header_end
 end
 
----Extract comment text (remove markers, get first line only).
----@param line string
----@return string|nil, string|nil, boolean, string|nil
+-- AI HINTS: -Extract comment text (remove markers, get first line only).
+-- AI HINTS: -@param line string
+-- AI HINTS: -@return string|nil, string|nil, boolean, string|nil
 function M.extract_comment(line)
-  -- Extract a compact comment text suitable for minimap display:
-  --   - remove comment markers (--, --[[, ]])
-  --   - detect marker prefixes like TODO:/FIXME:/NOTE:
-  --   - truncate to keep minimap lines compact
+  -- AI HINTS: Extract a compact comment text suitable for minimap display:
+  -- AI HINTS: - remove comment markers (--, --[[, ]])
+  -- AI HINTS: - detect marker prefixes like TODO:/FIXME:/NOTE:
+  -- AI HINTS: - truncate to keep minimap lines compact
   local trimmed = vim.trim(line)
 
   local is_doc_comment = trimmed:match("^%-%-%-") ~= nil
@@ -216,16 +216,16 @@ function M.extract_comment(line)
   return text, marker, is_doc_comment, raw_text
 end
 
----Render a comment entry for the minimap (no comment prefix).
----@param line string
----@param line_nr integer 1-indexed
----@param all_lines string[]
----@return {kind:"marker"|"comment", marker:string|nil, text:string}|nil
+-- AI HINTS: -Render a comment entry for the minimap (no comment prefix).
+-- AI HINTS: -@param line string
+-- AI HINTS: -@param line_nr integer 1-indexed
+-- AI HINTS: -@param all_lines string[]
+-- AI HINTS: -@return {kind:"marker"|"comment", marker:string|nil, text:string}|nil
 function M.render_comment(line, line_nr, all_lines)
-  -- Convert a source comment line into a minimap entry.
-  -- Returns:
-  --   - { kind="marker", marker="TODO", text="..." } for marker comments
-  --   - { kind="comment", text="..." } for regular comments (non-header)
+  -- AI HINTS: Convert a source comment line into a minimap entry.
+  -- AI HINTS: Returns:
+  -- AI HINTS: - { kind="marker", marker="TODO", text="..." } for marker comments
+  -- AI HINTS: - { kind="comment", text="..." } for regular comments (non-header)
   local text, marker = M.extract_comment(line)
   if marker then
     return { kind = "marker", marker = marker, text = text or "" }

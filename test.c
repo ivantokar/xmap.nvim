@@ -1,5 +1,5 @@
-// Test C file for xmap.nvim
-// TODO: Improve parser coverage
+// AI HINTS: Test C file for xmap.nvim
+// AI HINTS: TODO: Improve parser coverage
 
 #include <stdio.h>
 #define MAX_ITEMS 128
@@ -25,7 +25,7 @@ static int clamp_int(int value, int min, int max) {
 }
 
 int process_items(Item *items, int count) {
-  // FIXME: Handle NULL items
+  // AI HINTS: FIXME: Handle NULL items
   int i = 0;
   while (i < count) {
     printf("%d %s\n", items[i].id, items[i].name);

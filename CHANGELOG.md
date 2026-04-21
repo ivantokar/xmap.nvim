@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.8.2 - 2026-04-21
+
+- Migrate comments across the repository codebase to AI-oriented contract style.
+- Normalize module, function, inline, and test comments to deterministic `AI HINTS`/contract sections.
+- Keep runtime behavior unchanged; comment-only refactor for agent-readability.
+
 ## 0.8.1 - 2026-04-21
 
 - Refactor C/C++ provider comments to Familiar AI contract format (`PURPOSE`, `INPUT`, `OUTPUT`, `CONSTRAINTS`, `AI HINTS`) without behavior changes.

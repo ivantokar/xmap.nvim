@@ -1,20 +1,20 @@
--- lua/xmap/lang/swift.lua
--- Copyright (c) Ivan Tokar. MIT License.
--- Swift language support for xmap.nvim
+-- AI HINTS: lua/xmap/lang/swift.lua
+-- AI HINTS: Copyright (c) Ivan Tokar. MIT License.
+-- AI HINTS: Swift language support for xmap.nvim
 --
--- This provider implements Swift-specific logic required by the core minimap renderer:
---   - A set of default declaration keywords to show in the minimap (func/struct/enum/...)
---   - A Tree-sitter query (with fallbacks) to obtain structural node ranges for highlighting
---   - A lightweight line-based parser (`parse_symbol`) that turns a source line into:
---       { keyword = "...", capture_type = "...", display = "..." }
---     where `capture_type` matches the generic icon/highlight maps in `treesitter.lua`.
---   - Comment detection and rendering (including MARK/TODO/FIXME style markers)
+-- AI HINTS: This provider implements Swift-specific logic required by the core minimap renderer:
+-- AI HINTS: - A set of default declaration keywords to show in the minimap (func/struct/enum/...)
+-- AI HINTS: - A Tree-sitter query (with fallbacks) to obtain structural node ranges for highlighting
+-- AI HINTS: - A lightweight line-based parser (`parse_symbol`) that turns a source line into:
+-- AI HINTS: { keyword = "...", capture_type = "...", display = "..." }
+-- AI HINTS: where `capture_type` matches the generic icon/highlight maps in `treesitter.lua`.
+-- AI HINTS: - Comment detection and rendering (including MARK/TODO/FIXME style markers)
 --
--- Why both Tree-sitter *and* a line parser?
---   - Tree-sitter is optional and may not be installed.
---   - Even when available, we only need it for structural highlighting ranges.
---   - For the minimap list itself, a cheap line-based parser is often enough and avoids
---     tight coupling to Tree-sitter node names across parser versions.
+-- AI HINTS: Why both Tree-sitter *and* a line parser?
+-- AI HINTS: - Tree-sitter is optional and may not be installed.
+-- AI HINTS: - Even when available, we only need it for structural highlighting ranges.
+-- AI HINTS: - For the minimap list itself, a cheap line-based parser is often enough and avoids
+-- AI HINTS: tight coupling to Tree-sitter node names across parser versions.
 
 local M = {}
 
@@ -53,18 +53,18 @@ local function ltrim(text)
 end
 
 local function strip_swift_attributes(text)
-  -- Swift declarations often start with attributes like:
-  --   @MainActor
-  --   @available(iOS 17, *)
-  -- For minimap display we remove leading attributes to find the actual keyword.
+  -- AI HINTS: Swift declarations often start with attributes like:
+  -- AI HINTS: @MainActor
+  -- AI HINTS: @available(iOS 17, *)
+  -- AI HINTS: For minimap display we remove leading attributes to find the actual keyword.
   local out = ltrim(text)
 
   while true do
     local before = out
 
-    -- Attributes with args: @available(...)
+    -- AI HINTS: Attributes with args: @available(...)
     out = out:gsub("^@[%w_]+%b()%s*", "")
-    -- Attributes without args: @MainActor
+    -- AI HINTS: Attributes without args: @MainActor
     out = out:gsub("^@[%w_]+%s*", "")
 
     out = ltrim(out)
@@ -77,9 +77,9 @@ local function strip_swift_attributes(text)
 end
 
 local function strip_swift_modifiers(text)
-  -- Swift declarations also often contain modifiers:
-  --   public/private/internal/open, final, static, override, ...
-  -- We strip common ones so `parse_symbol` can match on `func`, `struct`, etc.
+  -- AI HINTS: Swift declarations also often contain modifiers:
+  -- AI HINTS: public/private/internal/open, final, static, override, ...
+  -- AI HINTS: We strip common ones so `parse_symbol` can match on `func`, `struct`, etc.
   local out = ltrim(text)
 
   local function strip(pattern)
@@ -94,11 +94,11 @@ local function strip_swift_modifiers(text)
   while true do
     local changed = false
 
-    -- Access control (incl. private(set))
+    -- AI HINTS: Access control (incl. private(set))
     changed = strip("^(public|private|fileprivate|internal|open)%s*%b()%s*") or changed
     changed = strip("^(public|private|fileprivate|internal|open)%s+") or changed
 
-    -- Common modifiers
+    -- AI HINTS: Common modifiers
     changed = strip("^final%s+") or changed
     changed = strip("^static%s+") or changed
     changed = strip("^indirect%s+") or changed
@@ -112,7 +112,7 @@ local function strip_swift_modifiers(text)
     changed = strip("^required%s+") or changed
     changed = strip("^dynamic%s+") or changed
 
-    -- `class` can be a modifier for members (class func / class var), but also a type declaration.
+    -- AI HINTS: `class` can be a modifier for members (class func / class var), but also a type declaration.
     if out:match("^class%s+(func|var|let|subscript)%s") then
       changed = strip("^class%s+") or changed
     end
@@ -142,12 +142,12 @@ local function capture_value_name_after(keyword, text)
 end
 
 local QUERY_VARIANTS = {
-  -- Tree-sitter node names for Swift have changed across parser versions.
-  -- To avoid a hard failure on first run, we provide query candidates ordered
-  -- from "newest known" to "most compatible". `treesitter.lua` tries these in
-  -- order and caches the first one that parses successfully.
+  -- AI HINTS: Tree-sitter node names for Swift have changed across parser versions.
+  -- AI HINTS: To avoid a hard failure on first run, we provide query candidates ordered
+  -- AI HINTS: from "newest known" to "most compatible". `treesitter.lua` tries these in
+  -- AI HINTS: order and caches the first one that parses successfully.
 
-  -- Newer parsers
+  -- AI HINTS: Newer parsers
   [[
     (class_declaration) @class
     (struct_declaration) @class
@@ -165,7 +165,7 @@ local QUERY_VARIANTS = {
     (property_declaration) @variable
   ]],
 
-  -- Some parsers use `deinit_declaration`
+  -- AI HINTS: Some parsers use `deinit_declaration`
   [[
     (class_declaration) @class
     (struct_declaration) @class
@@ -183,7 +183,7 @@ local QUERY_VARIANTS = {
     (property_declaration) @variable
   ]],
 
-  -- Without newer declarations (max compatibility)
+  -- AI HINTS: Without newer declarations (max compatibility)
   [[
     (class_declaration) @class
     (struct_declaration) @class
@@ -197,7 +197,7 @@ local QUERY_VARIANTS = {
     (property_declaration) @variable
   ]],
 
-  -- Minimal (original)
+  -- AI HINTS: Minimal (original)
   [[
     (class_declaration) @class
     (function_declaration) @function
@@ -205,7 +205,7 @@ local QUERY_VARIANTS = {
     (property_declaration) @variable
   ]],
 
-  -- Minimal without properties (fallback)
+  -- AI HINTS: Minimal without properties (fallback)
   [[
     (class_declaration) @class
     (function_declaration) @function
@@ -213,33 +213,33 @@ local QUERY_VARIANTS = {
   ]],
 }
 
----Get Tree-sitter query candidates for Swift (newest-first).
----@return string[]
+-- AI HINTS: -Get Tree-sitter query candidates for Swift (newest-first).
+-- AI HINTS: -@return string[]
 function M.get_queries()
   return QUERY_VARIANTS
 end
 
----Get the primary Tree-sitter query string for Swift.
----@return string
+-- AI HINTS: -Get the primary Tree-sitter query string for Swift.
+-- AI HINTS: -@return string
 function M.get_query()
   return QUERY_VARIANTS[1]
 end
 
----Parse a Swift declaration line into a symbol item.
----@param line_text string
----@return {keyword:string, capture_type:string, display:string}|nil
+-- AI HINTS: -Parse a Swift declaration line into a symbol item.
+-- AI HINTS: -@param line_text string
+-- AI HINTS: -@return {keyword:string, capture_type:string, display:string}|nil
 function M.parse_symbol(line_text)
-  -- Parsing strategy:
-  --   1) trim + strip attributes/modifiers
-  --   2) detect declaration keyword
-  --   3) capture a human-friendly name (when possible)
-  --   4) map to a generic capture_type used by `treesitter.get_icon_for_type`
+  -- AI HINTS: Parsing strategy:
+  -- AI HINTS: 1) trim + strip attributes/modifiers
+  -- AI HINTS: 2) detect declaration keyword
+  -- AI HINTS: 3) capture a human-friendly name (when possible)
+  -- AI HINTS: 4) map to a generic capture_type used by `treesitter.get_icon_for_type`
   local cleaned = strip_swift_modifiers(strip_swift_attributes(line_text))
   if cleaned == "" then
     return nil
   end
 
-  -- init/deinit (support init?, init!)
+  -- AI HINTS: init/deinit (support init?, init!)
   local init_kind = cleaned:match("^init([?!]?)%s*%(")
   if init_kind ~= nil then
     local keyword = "init"
@@ -251,13 +251,13 @@ function M.parse_symbol(line_text)
     return { keyword = "deinit", capture_type = "function", display = "deinit" }
   end
 
-  -- func
+  -- AI HINTS: func
   local func_name = capture_func_name(cleaned)
   if func_name then
     return { keyword = "func", capture_type = "function", display = "func " .. func_name }
   end
 
-  -- types
+  -- AI HINTS: types
   local type_keywords = { "class", "struct", "enum", "protocol", "extension", "typealias", "actor" }
   for _, keyword in ipairs(type_keywords) do
     local name = capture_type_name_after(keyword, cleaned)
@@ -266,7 +266,7 @@ function M.parse_symbol(line_text)
     end
   end
 
-  -- properties
+  -- AI HINTS: properties
   local let_name = capture_value_name_after("let", cleaned)
   if let_name then
     return { keyword = "let", capture_type = "variable", display = "let " .. let_name }
@@ -281,7 +281,7 @@ function M.parse_symbol(line_text)
     return { keyword = "subscript", capture_type = "function", display = "subscript" }
   end
 
-  -- return statements (useful for quickly spotting exits/JSX returns)
+  -- AI HINTS: return statements (useful for quickly spotting exits/JSX returns)
   if cleaned == "return" or cleaned:match("^return%f[%W]") then
     local rest = vim.trim((cleaned:gsub("^return", "", 1)))
     rest = vim.trim((rest:gsub(";+%s*$", "")))
@@ -295,25 +295,25 @@ function M.parse_symbol(line_text)
   return nil
 end
 
----Check if a line is a comment line in Swift.
----@param trimmed string
----@return boolean
+-- AI HINTS: -Check if a line is a comment line in Swift.
+-- AI HINTS: -@param trimmed string
+-- AI HINTS: -@return boolean
 function M.is_comment_line(trimmed)
-  -- Swift supports:
-  --   - line comments: //
-  --   - doc comments:  ///
-  --   - block comments: /* ... */
-  -- plus block-comment "continuation" lines that often start with `*`.
+  -- AI HINTS: Swift supports:
+  -- AI HINTS: - line comments: //
+  -- AI HINTS: - doc comments:  ///
+  -- AI HINTS: - block comments: /* ... */
+  -- AI HINTS: plus block-comment "continuation" lines that often start with `*`.
   return trimmed:match("^//") or trimmed:match("^/%*") or trimmed:match("^%*")
 end
 
----Detect file header comments to reduce noise.
----@param lines string[]
----@param line_nr integer 1-indexed
----@return boolean
+-- AI HINTS: -Detect file header comments to reduce noise.
+-- AI HINTS: -@param lines string[]
+-- AI HINTS: -@param line_nr integer 1-indexed
+-- AI HINTS: -@return boolean
 function M.is_file_header(lines, line_nr)
-  -- File header blocks (license banners, generated comments) can dominate the minimap.
-  -- We detect "a run of >=3 comment lines at the top of the file" and suppress them.
+  -- AI HINTS: File header blocks (license banners, generated comments) can dominate the minimap.
+  -- AI HINTS: We detect "a run of >=3 comment lines at the top of the file" and suppress them.
   if line_nr > 50 then
     return false
   end
@@ -342,14 +342,14 @@ function M.is_file_header(lines, line_nr)
   return comment_count >= 3 and line_nr <= header_end
 end
 
----Extract comment text (remove markers, get first line only).
----@param line string
----@return string|nil, string|nil, boolean, string|nil
+-- AI HINTS: -Extract comment text (remove markers, get first line only).
+-- AI HINTS: -@param line string
+-- AI HINTS: -@return string|nil, string|nil, boolean, string|nil
 function M.extract_comment(line)
-  -- Extract a compact comment text suitable for minimap display:
-  --   - remove comment markers (//, ///, /*, *)
-  --   - detect marker prefixes like MARK:/TODO:/FIXME:
-  --   - truncate to keep minimap lines compact
+  -- AI HINTS: Extract a compact comment text suitable for minimap display:
+  -- AI HINTS: - remove comment markers (//, ///, /*, *)
+  -- AI HINTS: - detect marker prefixes like MARK:/TODO:/FIXME:
+  -- AI HINTS: - truncate to keep minimap lines compact
   local trimmed = vim.trim(line)
 
   local is_doc_comment = trimmed:match("^///") or trimmed:match("^/%*%*")
@@ -396,16 +396,16 @@ function M.extract_comment(line)
   return text, marker, is_doc_comment, raw_text
 end
 
----Render a comment entry for the minimap (no comment prefix).
----@param line string
----@param line_nr integer 1-indexed
----@param all_lines string[]
----@return {kind:"marker"|"comment", marker:string|nil, text:string}|nil
+-- AI HINTS: -Render a comment entry for the minimap (no comment prefix).
+-- AI HINTS: -@param line string
+-- AI HINTS: -@param line_nr integer 1-indexed
+-- AI HINTS: -@param all_lines string[]
+-- AI HINTS: -@return {kind:"marker"|"comment", marker:string|nil, text:string}|nil
 function M.render_comment(line, line_nr, all_lines)
-  -- Convert a source comment line into a minimap entry.
-  -- Returns:
-  --   - { kind="marker", marker="TODO", text="..." } for marker comments
-  --   - { kind="comment", text="..." } for regular comments (non-header)
+  -- AI HINTS: Convert a source comment line into a minimap entry.
+  -- AI HINTS: Returns:
+  -- AI HINTS: - { kind="marker", marker="TODO", text="..." } for marker comments
+  -- AI HINTS: - { kind="comment", text="..." } for regular comments (non-header)
   local text, marker = M.extract_comment(line)
   if marker then
     return { kind = "marker", marker = marker, text = text or "" }

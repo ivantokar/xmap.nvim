@@ -1,17 +1,17 @@
--- Test configuration for xmap.nvim
--- Usage: nvim -u test_config.lua test.swift
---        nvim -u test_config.lua test.ts
---        nvim -u test_config.lua test.tsx
---        nvim -u test_config.lua test.c
---        nvim -u test_config.lua test.cpp
--- Header alias coverage can be exercised by setting filetype manually:
---        :set ft=h
---        :set ft=hpp
+-- AI HINTS: Test configuration for xmap.nvim
+-- AI HINTS: Usage: nvim -u test_config.lua test.swift
+-- AI HINTS: nvim -u test_config.lua test.ts
+-- AI HINTS: nvim -u test_config.lua test.tsx
+-- AI HINTS: nvim -u test_config.lua test.c
+-- AI HINTS: nvim -u test_config.lua test.cpp
+-- AI HINTS: Header alias coverage can be exercised by setting filetype manually:
+-- AI HINTS: :set ft=h
+-- AI HINTS: :set ft=hpp
 
--- Add current directory to runtime path
+-- AI HINTS: Add current directory to runtime path
 vim.opt.rtp:prepend(".")
 
--- Load xmap
+-- AI HINTS: Load xmap
 require("xmap").setup({
   width = 25,
   side = "right",
@@ -28,7 +28,7 @@ require("xmap").setup({
   },
 })
 
--- Print success message
+-- AI HINTS: Print success message
 print("✓ xmap.nvim loaded successfully!")
 print("Commands: :XmapToggle, :XmapOpen, :XmapClose")
 print("Keymaps: <leader>mm (toggle), <leader>mf (focus)")

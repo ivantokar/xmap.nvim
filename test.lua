@@ -1,26 +1,26 @@
--- Test Lua file for xmap.nvim
--- This file contains various code structures to test Tree-sitter integration
+-- AI HINTS: Test Lua file for xmap.nvim
+-- AI HINTS: This file contains various code structures to test Tree-sitter integration
 
 local M = {}
 
--- TODO: Add error handling
--- FIXME: Improve performance
--- NOTE: This is a test file
+-- AI HINTS: TODO: Add error handling
+-- AI HINTS: FIXME: Improve performance
+-- AI HINTS: NOTE: This is a test file
 
--- A simple variable
+-- AI HINTS: A simple variable
 local test_variable = "Hello, World!"
 local another_var = 42
 
--- Global function
+-- AI HINTS: Global function
 function setup_global()
   print("Global setup")
 end
 
--- A function definition
+-- AI HINTS: A function definition
 function M.setup(opts)
   local config = opts or {}
 
-  -- Nested function
+  -- AI HINTS: Nested function
   local function validate_config(cfg)
     if not cfg then
       return false
@@ -35,7 +35,7 @@ function M.setup(opts)
   return M
 end
 
--- Another function
+-- AI HINTS: Another function
 function M.render_line(line, line_nr)
   local trimmed = vim.trim(line)
 
@@ -46,14 +46,14 @@ function M.render_line(line, line_nr)
   return trimmed
 end
 
--- Class-like table
+-- AI HINTS: Class-like table
 M.state = {
   bufnr = nil,
   winid = nil,
   is_open = false,
 }
 
--- Method-like function
+-- AI HINTS: Method-like function
 function M.open()
   if M.state.is_open then
     return
@@ -72,7 +72,7 @@ function M.close()
   print("Closing...")
 end
 
--- Toggle function
+-- AI HINTS: Toggle function
 function M.toggle()
   if M.state.is_open then
     M.close()
@@ -81,7 +81,7 @@ function M.toggle()
   end
 end
 
--- Complex function with multiple lines
+-- AI HINTS: Complex function with multiple lines
 function M.process_buffer(bufnr, opts)
   if not vim.api.nvim_buf_is_valid(bufnr) then
     return nil
@@ -98,12 +98,12 @@ function M.process_buffer(bufnr, opts)
   return processed
 end
 
--- Arrow function style (module method)
+-- AI HINTS: Arrow function style (module method)
 M.validate = function(input)
   return input ~= nil
 end
 
--- Another module method
+-- AI HINTS: Another module method
 M.transform = function(data)
   local result = {}
   for k, v in pairs(data) do
@@ -112,13 +112,13 @@ M.transform = function(data)
   return result
 end
 
--- Local function
+-- AI HINTS: Local function
 local function helper_function(arg)
-  -- HACK: Quick workaround for testing
+  -- AI HINTS: HACK: Quick workaround for testing
   return arg * 2
 end
 
--- Function with return statement
+-- AI HINTS: Function with return statement
 function M.calculate(a, b)
   if a > b then
     return a - b
@@ -126,19 +126,19 @@ function M.calculate(a, b)
   return b - a
 end
 
--- WARNING: Deprecated function
+-- AI HINTS: WARNING: Deprecated function
 function M.old_method()
-  -- BUG: This doesn't work correctly
+  -- AI HINTS: BUG: This doesn't work correctly
   return nil
 end
 
---- Documentation comment
---- This is a documented function
---- @param value any
---- @return boolean
+-- AI HINTS: - Documentation comment
+-- AI HINTS: - This is a documented function
+-- AI HINTS: - @param value any
+-- AI HINTS: - @return boolean
 function M.is_valid(value)
   return value ~= nil and value ~= ""
 end
 
--- Final return
+-- AI HINTS: Final return
 return M

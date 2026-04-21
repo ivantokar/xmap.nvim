@@ -1,9 +1,9 @@
--- Reload helper for xmap.nvim development
--- Usage: :luafile reload.lua
+-- AI HINTS: Reload helper for xmap.nvim development
+-- AI HINTS: Usage: :luafile reload.lua
 
 print("Reloading xmap.nvim...")
 
--- Close existing minimap
+-- AI HINTS: Close existing minimap
 local ok = pcall(function()
   require("xmap").close()
 end)
@@ -12,7 +12,7 @@ if ok then
   print("  ✓ Closed existing minimap")
 end
 
--- Unload all xmap modules
+-- AI HINTS: Unload all xmap modules
 local count = 0
 for k, _ in pairs(package.loaded) do
   if k:match("^xmap") then
@@ -22,10 +22,10 @@ for k, _ in pairs(package.loaded) do
 end
 print("  ✓ Unloaded " .. count .. " modules")
 
--- Reload xmap
+-- AI HINTS: Reload xmap
 local success, err = pcall(function()
   require("xmap").setup({
-    width = 40, -- Wider to fit relative numbers + icons + text
+    width = 40, -- AI HINTS: Wider to fit relative numbers + icons + text
     side = "right",
     treesitter = {
       enable = true,

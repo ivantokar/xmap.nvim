@@ -1,5 +1,5 @@
--- lua/xmap/lang/cpp.lua
--- Copyright (c) Ivan Tokar. MIT License.
+-- AI HINTS: lua/xmap/lang/cpp.lua
+-- AI HINTS: Copyright (c) Ivan Tokar. MIT License.
 -- PURPOSE: Provide C++ symbol/comment extraction for xmap minimap.
 -- DEPENDENCIES: Neovim Lua API (`vim.*`) and xmap language loader.
 -- CONSTRAINTS: Keep provider pure; no buffer/window mutation.
@@ -74,8 +74,8 @@ end
 -- INPUT: Raw source line text.
 -- OUTPUT: Same line without known leading declaration modifiers.
 -- ALGORITHM:
--- - Trim leading whitespace.
--- - Iteratively strip known modifiers until no change.
+-- AI HINTS: - Trim leading whitespace.
+-- AI HINTS: - Iteratively strip known modifiers until no change.
 -- CONSTRAINTS: Strip only leading tokens; preserve semantic tail.
 local function strip_modifiers(text)
 	local out = ltrim(text)
@@ -111,8 +111,8 @@ function M.parse_symbol(line_text)
 	-- INPUT: `line_text` (string|nil), may include modifiers/comments/spacing noise.
 	-- OUTPUT: Table `{ keyword, capture_type, display }` or nil.
 	-- DO:
-	-- - Prefer explicit constructs (`#define`, `namespace`, `class`, aliases, methods).
-	-- - Avoid control keywords as function names.
+	-- AI HINTS: - Prefer explicit constructs (`#define`, `namespace`, `class`, aliases, methods).
+	-- AI HINTS: - Avoid control keywords as function names.
 	-- CONSTRAINTS: Pattern-only parser; no Tree-sitter dependency here.
 	-- AI HINTS: Extend by adding guarded parsing blocks; keep scoped-method detection before generic function patterns.
 	local cleaned = strip_modifiers(line_text or "")

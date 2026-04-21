@@ -1,5 +1,5 @@
-// Test C++ file for xmap.nvim
-// NOTE: Includes class/namespace/method examples
+// AI HINTS: Test C++ file for xmap.nvim
+// AI HINTS: NOTE: Includes class/namespace/method examples
 
 #include <string>
 #include <vector>
@@ -12,7 +12,7 @@ class Engine {
   explicit Engine(std::string name) : name_(std::move(name)) {}
 
   int run(int count) const {
-    // BUG: Replace hard-coded multiplier
+    // AI HINTS: BUG: Replace hard-coded multiplier
     return count * 2;
   }
 
@@ -27,4 +27,4 @@ inline int sum(const std::vector<int>& values) {
   }
   return total;
 }
-}  // namespace demo
+}  // AI HINTS: namespace demo

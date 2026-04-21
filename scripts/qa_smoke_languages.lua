@@ -1,5 +1,5 @@
--- scripts/qa_smoke_languages.lua
--- Headless smoke check: ensure xmap opens/closes across bundled filetypes.
+-- AI HINTS: scripts/qa_smoke_languages.lua
+-- AI HINTS: Headless smoke check: ensure xmap opens/closes across bundled filetypes.
 
 local function assert_true(value, message)
   if not value then
@@ -15,10 +15,10 @@ local cases = {
 	{ path = "test.swift", filetype = "swift" },
 	{ path = "test.ts", filetype = "typescript" },
 	{ path = "test.tsx", filetype = "typescriptreact" },
-	-- C/C++ provider smoke tests.
+	-- AI HINTS: C/C++ provider smoke tests.
 	{ path = "test.c", filetype = "c" },
 	{ path = "test.cpp", filetype = "cpp" },
-	-- Header aliases: `h` -> C provider, `hpp` -> C++ provider.
+	-- AI HINTS: Header aliases: `h` -> C provider, `hpp` -> C++ provider.
 	{ path = "test.c", filetype = "h" },
 	{ path = "test.cpp", filetype = "hpp" },
 }

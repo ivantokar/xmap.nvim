@@ -1,6 +1,6 @@
-// Test TSX file for xmap.nvim
-// This file contains various TSX/React structures to test the minimap provider
-// (This header block should be suppressed in the minimap)
+// AI HINTS: Test TSX file for xmap.nvim
+// AI HINTS: This file contains various TSX/React structures to test the minimap provider
+// AI HINTS: (This header block should be suppressed in the minimap)
 
 import React from "react"
 

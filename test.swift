@@ -1,66 +1,66 @@
-// Test Swift file for xmap.nvim
-// This file contains various Swift structures to test Tree-sitter integration
+// AI HINTS: Test Swift file for xmap.nvim
+// AI HINTS: This file contains various Swift structures to test Tree-sitter integration
 
 import Foundation
 
-// A simple struct
+// AI HINTS: A simple struct
 struct User {
     let id: Int
     let name: String
     var email: String
 }
 
-// A class with properties and methods
+// AI HINTS: A class with properties and methods
 class UserManager {
     private var users: [User] = []
 
-    // Initializer
+    // AI HINTS: Initializer
     init() {
         self.users = []
     }
 
-    // Method to add user
+    // AI HINTS: Method to add user
     func addUser(_ user: User) {
         users.append(user)
         print("Added user: \(user.name)")
     }
 
-    // Method to find user
+    // AI HINTS: Method to find user
     func findUser(byId id: Int) -> User? {
         return users.first { $0.id == id }
     }
 
-    // Method to remove user
+    // AI HINTS: Method to remove user
     func removeUser(byId id: Int) {
         users.removeAll { $0.id == id }
     }
 
-    // Computed property
+    // AI HINTS: Computed property
     var userCount: Int {
         return users.count
     }
 
-    // Deinitializer
+    // AI HINTS: Deinitializer
     deinit {
         print("UserManager deallocated")
     }
 }
 
-// Protocol definition
+// AI HINTS: Protocol definition
 protocol Identifiable {
     var id: Int { get }
 }
 
-// Extension
+// AI HINTS: Extension
 extension User: Identifiable {}
 
-// Enum with associated values
+// AI HINTS: Enum with associated values
 enum Result<T> {
     case success(T)
     case failure(Error)
 }
 
-// A function
+// AI HINTS: A function
 func processUsers(_ users: [User]) -> Int {
     var count = 0
 
@@ -72,16 +72,16 @@ func processUsers(_ users: [User]) -> Int {
     return count
 }
 
-// Generic function
+// AI HINTS: Generic function
 func fetchData<T>(completion: @escaping (Result<T>) -> Void) {
-    // Simulate async operation
+    // AI HINTS: Simulate async operation
     DispatchQueue.global().async {
-        // Process data
+        // AI HINTS: Process data
         completion(.success("Data" as! T))
     }
 }
 
-// Another struct with methods
+// AI HINTS: Another struct with methods
 struct Configuration {
     var width: Int
     var height: Int
