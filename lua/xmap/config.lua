@@ -18,7 +18,9 @@ local M = {}
 -- Bundled languages. Additional languages can be added by installing/creating a
 -- matching provider module under `lua/xmap/lang/<filetype>.lua` and adding the
 -- filetype to `filetypes` (and `treesitter.languages` if desired).
-local DEFAULT_FILETYPES = { "swift", "typescript", "typescriptreact", "lua", "markdown" }
+-- Default provider set now includes C-family filetypes:
+-- `h` maps to the C provider and `hpp` maps to the C++ provider.
+local DEFAULT_FILETYPES = { "swift", "typescript", "typescriptreact", "lua", "markdown", "c", "cpp", "h", "hpp" }
 
 local function get_default_filetypes()
 	return vim.deepcopy(DEFAULT_FILETYPES)
@@ -81,6 +83,20 @@ M.defaults = {
 		},
 		markdown = {
 			keywords = {}, -- When empty, uses the Markdown provider defaults (H1-H6)
+			exclude = {},
+			highlight_keywords = {},
+		},
+		c = {
+			-- Empty keyword/highlight arrays intentionally defer to provider-level
+			-- defaults from `lua/xmap/lang/c.lua`.
+			keywords = {}, -- When empty, uses the C provider defaults
+			exclude = {},
+			highlight_keywords = {},
+		},
+		cpp = {
+			-- Empty keyword/highlight arrays intentionally defer to provider-level
+			-- defaults from `lua/xmap/lang/cpp.lua`.
+			keywords = {}, -- When empty, uses the C++ provider defaults
 			exclude = {},
 			highlight_keywords = {},
 		},

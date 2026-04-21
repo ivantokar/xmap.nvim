@@ -2,6 +2,11 @@
 -- Usage: nvim -u test_config.lua test.swift
 --        nvim -u test_config.lua test.ts
 --        nvim -u test_config.lua test.tsx
+--        nvim -u test_config.lua test.c
+--        nvim -u test_config.lua test.cpp
+-- Header alias coverage can be exercised by setting filetype manually:
+--        :set ft=h
+--        :set ft=hpp
 
 -- Add current directory to runtime path
 vim.opt.rtp:prepend(".")

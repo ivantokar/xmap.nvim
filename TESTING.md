@@ -26,6 +26,8 @@ Inside Neovim:
 make test-swift    # Test Swift support
 make test-ts       # Test TypeScript support
 make test-tsx      # Test TSX/React support
+make test-c        # Test C support
+make test-cpp      # Test C++ support
 ```
 
 ### 3. Development Mode
@@ -43,6 +45,8 @@ The repository includes test files for all supported languages:
 - **test.swift** - Swift classes, functions, properties, comments
 - **test.ts** - TypeScript functions, classes, interfaces, types
 - **test.tsx** - TSX/React components, hooks, JSX
+- **test.c** - C functions, structs/enums, macros, comments/markers
+- **test.cpp** - C++ namespaces, classes/methods, functions, comments/markers
 
 ## Testing Workflow
 

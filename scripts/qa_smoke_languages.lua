@@ -11,10 +11,16 @@ local xmap = require("xmap")
 local minimap = require("xmap.minimap")
 
 local cases = {
-  { path = "test.lua", filetype = "lua" },
-  { path = "test.swift", filetype = "swift" },
-  { path = "test.ts", filetype = "typescript" },
-  { path = "test.tsx", filetype = "typescriptreact" },
+	{ path = "test.lua", filetype = "lua" },
+	{ path = "test.swift", filetype = "swift" },
+	{ path = "test.ts", filetype = "typescript" },
+	{ path = "test.tsx", filetype = "typescriptreact" },
+	-- C/C++ provider smoke tests.
+	{ path = "test.c", filetype = "c" },
+	{ path = "test.cpp", filetype = "cpp" },
+	-- Header aliases: `h` -> C provider, `hpp` -> C++ provider.
+	{ path = "test.c", filetype = "h" },
+	{ path = "test.cpp", filetype = "hpp" },
 }
 
 for _, case in ipairs(cases) do

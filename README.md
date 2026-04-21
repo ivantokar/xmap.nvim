@@ -18,7 +18,7 @@ An **Xcode-style minimap** for Neovim with full **keyboard navigation** and **Tr
 - **Colorscheme Aware**: Uses highlight groups - no hard-coded colors
 - **Performance Optimized**: Throttled updates and efficient rendering
 - **Fully Configurable**: Customize every aspect to fit your workflow
-- **Swift + TypeScript + Lua + Markdown**: Bundled providers with a pluggable language architecture
+- **Swift + TypeScript + Lua + Markdown + C/C++**: Bundled providers with a pluggable language architecture
 - **Compact Display**: Smaller font with icons for better space utilization
 
 ## Requirements
@@ -90,7 +90,7 @@ require("xmap").setup({
   auto_open = false,       -- Auto-open for supported filetypes
 
   -- Supported filetypes
-  filetypes = { "swift", "typescript", "typescriptreact", "lua", "markdown" },
+  filetypes = { "swift", "typescript", "typescriptreact", "lua", "markdown", "c", "cpp", "h", "hpp" },
 
   -- Filetypes to exclude
   exclude_filetypes = {
@@ -110,7 +110,7 @@ require("xmap").setup({
   treesitter = {
     enable = true,                    -- Enable Tree-sitter
     highlight_scopes = true,          -- Highlight functions/classes
-    languages = { "swift", "typescript", "typescriptreact", "lua", "markdown" },
+    languages = { "swift", "typescript", "typescriptreact", "lua", "markdown", "c", "cpp", "h", "hpp" },
   },
 
   -- Symbol filtering per language (keyed by filetype)
@@ -137,6 +137,16 @@ require("xmap").setup({
     },
     markdown = {
       keywords = {},          -- When empty, uses Markdown defaults (H1-H6)
+      exclude = {},
+      highlight_keywords = {},
+    },
+    c = {
+      keywords = {},          -- When empty, uses C defaults
+      exclude = {},
+      highlight_keywords = {},
+    },
+    cpp = {
+      keywords = {},          -- When empty, uses C++ defaults
       exclude = {},
       highlight_keywords = {},
     },
@@ -245,7 +255,7 @@ xmap.nvim uses Tree-sitter to provide structural awareness and highlighting. Thi
 
 ### Supported Languages
 
-Bundled: **Swift**, **TypeScript**, **TypeScriptReact**, **Lua**, **Markdown**.
+Bundled: **Swift**, **TypeScript**, **TypeScriptReact**, **Lua**, **Markdown**, **C/C++** (including header aliases `h`/`hpp`).
 
 To add another language later, add a provider module at `lua/xmap/lang/<filetype>.lua` and include the filetype in `filetypes` (and `treesitter.languages` if you want Tree-sitter highlighting).
 
@@ -254,7 +264,7 @@ To add another language later, add a provider module at `lua/xmap/lang/<filetype
 Tree-sitter integration is enabled by default. Make sure you have the parsers installed:
 
 ```vim
-:TSInstall swift typescript tsx lua
+:TSInstall swift typescript tsx lua c cpp
 ```
 
 To disable Tree-sitter features:
