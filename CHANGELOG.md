@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.8.2 - 2026-04-21
+
+- Migrate comments across the repository codebase to AI-oriented contract style.
+- Normalize module, function, inline, and test comments to deterministic `AI HINTS`/contract sections.
+- Keep runtime behavior unchanged; comment-only refactor for agent-readability.
+
+## 0.8.1 - 2026-04-21
+
+- Refactor C/C++ provider comments to Familiar AI contract format (`PURPOSE`, `INPUT`, `OUTPUT`, `CONSTRAINTS`, `AI HINTS`) without behavior changes.
+- Convert C/C++ alias file comments (`cc`, `cxx`, `h`, `hpp`) to AI contract style for deterministic mapping intent.
+- Update core module contract headers in `lua/xmap/config.lua` and `lua/xmap/init.lua`.
+- Bump plugin version string to `0.8.1`.
+
+## 0.8.0 - 2026-04-21
+
+- Add bundled C and C++ providers (`c`, `cpp`) with symbol extraction for functions, types (`struct`/`class`/`enum`/`union`), aliases (`typedef`/`using`), macros (`#define`), and return statements.
+- Add C/C++ comment support for single-line and block comment entries, including marker rendering for `TODO`, `FIXME`, `NOTE`, `WARNING`, `BUG`, and `HACK`.
+- Add header aliases with default provider mapping: `h` -> C provider, `hpp` -> C++ provider (plus C++ aliases `cc` and `cxx`).
+- Extend default config and docs to include C-family filetypes in `filetypes`, `treesitter.languages`, and language symbol configuration.
+
+### Utility updates
+
+- Add language smoke coverage for `c`, `cpp`, `h`, and `hpp` in `scripts/qa_smoke_languages.lua`.
+- Add manual test targets `make test-c` and `make test-cpp`.
+- Add C/C++ fixture files (`test.c`, `test.cpp`) and update testing/docs guidance for local validation.
+- Add detailed in-file maintenance comments to the new C/C++ providers to document query fallbacks, parsing heuristics, and alias behavior.
+
 ## 0.7.0 - 2026-02-11
 
 - Add bundled Lua provider (`lua`) with minimap entries for function declarations (global, local, module methods), variable declarations, and return statements.

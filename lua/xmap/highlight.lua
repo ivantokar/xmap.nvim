@@ -1,36 +1,36 @@
--- lua/xmap/highlight.lua
--- Copyright (c) Ivan Tokar. MIT License.
--- Highlight group management for xmap.nvim
+-- AI HINTS: lua/xmap/highlight.lua
+-- AI HINTS: Copyright (c) Ivan Tokar. MIT License.
+-- AI HINTS: Highlight group management for xmap.nvim
 --
--- Highlights are a big part of xmap's UX. The goals here are:
---   - Respect the active colorscheme by linking to existing groups by default.
---   - Provide safe fallbacks when a theme doesn't define a linked group.
---   - Allow user overrides via `require("xmap").setup({ highlights = { ... } })`.
---   - Keep overrides stable across `:colorscheme` by re-applying on ColorScheme.
+-- AI HINTS: Highlights are a big part of xmap's UX. The goals here are:
+-- AI HINTS: - Respect the active colorscheme by linking to existing groups by default.
+-- AI HINTS: - Provide safe fallbacks when a theme doesn't define a linked group.
+-- AI HINTS: - Allow user overrides via `require("xmap").setup({ highlights = { ... } })`.
+-- AI HINTS: - Keep overrides stable across `:colorscheme` by re-applying on ColorScheme.
 
 local config = require("xmap.config")
 
 local M = {}
 
--- Define all highlight groups used by xmap
--- These are the only highlight group names xmap will ever set.
+-- AI HINTS: Define all highlight groups used by xmap
+-- AI HINTS: These are the only highlight group names xmap will ever set.
 M.groups = {
-	-- Minimap window background
+	-- AI HINTS: Minimap window background
 	XmapBackground = { link = "Normal" },
 
-	-- Normal text in minimap (slightly dimmed)
+	-- AI HINTS: Normal text in minimap (slightly dimmed)
 	XmapText = { link = "Comment" },
 
-	-- Line numbers in minimap (if enabled)
+	-- AI HINTS: Line numbers in minimap (if enabled)
 	XmapLineNr = { link = "LineNr" },
 
-	-- Current viewport region (visible area in main buffer)
+	-- AI HINTS: Current viewport region (visible area in main buffer)
 	XmapViewport = { link = "Visual", no_fg = true },
 
-	-- Cursor/selection in minimap
+	-- AI HINTS: Cursor/selection in minimap
 	XmapCursor = { link = "CursorLine", no_fg = true },
 
-	-- Tree-sitter scope highlights (will inherit from colorscheme or use fallback)
+	-- AI HINTS: Tree-sitter scope highlights (will inherit from colorscheme or use fallback)
 	XmapFunction = { link = "@function" },
 	XmapClass = { link = "@type" },
 	XmapMethod = { link = "@method" },
@@ -47,50 +47,50 @@ M.groups = {
 	XmapMarkdownH6 = { link = "Comment" },
 	XmapMarkdownHeadingText = { link = "XmapText" },
 
-	-- Structural indicators
+	-- AI HINTS: Structural indicators
 	XmapScope = { link = "Title" },
 	XmapBorder = { link = "FloatBorder" },
 
-	-- Relative distance + direction prefix (derive from theme groups by default).
-	-- Used by `minimap.apply_relative_number_highlighting`.
+	-- AI HINTS: Relative distance + direction prefix (derive from theme groups by default).
+	-- AI HINTS: Used by `minimap.apply_relative_number_highlighting`.
 	XmapRelativeUp = { link = "DiagnosticOk", bold = true, no_bg = true },
 	XmapRelativeDown = { link = "DiagnosticError", bold = true, no_bg = true },
 	XmapRelativeCurrent = { link = "DiagnosticWarn", bold = true, no_bg = true },
-	XmapRelativeNumber = { link = "CursorLineNr", bold = false, no_bg = true }, -- Brighter numbers by default
+	XmapRelativeNumber = { link = "CursorLineNr", bold = false, no_bg = true }, -- AI HINTS: Brighter numbers by default
 	XmapRelativeKeyword = { link = "Keyword", bold = true, no_bg = true },
 	XmapRelativeEntity = { link = "Identifier", no_bg = true },
 
-	-- Comment markers
-	XmapCommentNormal = { link = "Comment", no_bg = true }, -- Regular comments
-	XmapCommentDoc = { link = "SpecialComment", no_bg = true }, -- Doc comments (///)
-	XmapCommentBold = { bold = true, no_bg = true }, -- Bold text for marker descriptions
-	XmapCommentMark = { link = "WarningMsg", bold = true, no_bg = true }, -- MARK: marker
-	XmapCommentTodo = { link = "WarningMsg", bold = true, no_bg = true }, -- TODO: marker
-	XmapCommentFixme = { link = "WarningMsg", bold = true, no_bg = true }, -- FIXME: marker
-	XmapCommentNote = { link = "WarningMsg", bold = true, no_bg = true }, -- NOTE: marker
-	XmapCommentWarning = { link = "WarningMsg", bold = true, no_bg = true }, -- WARNING: marker
-	XmapCommentBug = { link = "WarningMsg", bold = true, no_bg = true }, -- BUG: marker
+	-- AI HINTS: Comment markers
+	XmapCommentNormal = { link = "Comment", no_bg = true }, -- AI HINTS: Regular comments
+	XmapCommentDoc = { link = "SpecialComment", no_bg = true }, -- AI HINTS: Doc comments (///)
+	XmapCommentBold = { bold = true, no_bg = true }, -- AI HINTS: Bold text for marker descriptions
+	XmapCommentMark = { link = "WarningMsg", bold = true, no_bg = true }, -- AI HINTS: MARK: marker
+	XmapCommentTodo = { link = "WarningMsg", bold = true, no_bg = true }, -- AI HINTS: TODO: marker
+	XmapCommentFixme = { link = "WarningMsg", bold = true, no_bg = true }, -- AI HINTS: FIXME: marker
+	XmapCommentNote = { link = "WarningMsg", bold = true, no_bg = true }, -- AI HINTS: NOTE: marker
+	XmapCommentWarning = { link = "WarningMsg", bold = true, no_bg = true }, -- AI HINTS: WARNING: marker
+	XmapCommentBug = { link = "WarningMsg", bold = true, no_bg = true }, -- AI HINTS: BUG: marker
 }
 
--- Fallback colors (used only if a linked group does not exist or resolves to empty).
--- Keep these conservative: the intention is "still readable", not "force a theme".
+-- AI HINTS: Fallback colors (used only if a linked group does not exist or resolves to empty).
+-- AI HINTS: Keep these conservative: the intention is "still readable", not "force a theme".
 local fallback_colors = {
-	XmapFunction = { fg = "#7aa2f7", bold = true }, -- Blue
-	XmapClass = { fg = "#bb9af7", bold = true }, -- Purple
-	XmapVariable = { fg = "#9ece6a" }, -- Green
-	XmapSwiftKeyword = { fg = "#bb9af7" }, -- Purple
-	XmapRelativeUp = { fg = "#9ece6a", bold = true }, -- Green
-	XmapRelativeDown = { fg = "#f7768e", bold = true }, -- Red
-	XmapRelativeCurrent = { fg = "#e0af68", bold = true }, -- Yellow
-	XmapRelativeNumber = { fg = "#c0caf5", bold = true }, -- Bright
-	XmapRelativeKeyword = { fg = "#bb9af7", bold = true }, -- Purple (keywords)
-	XmapRelativeEntity = { fg = "#7dcfff" }, -- Cyan (entity names)
-	XmapMarkdownH1 = { fg = "#f7768e" }, -- Red
-	XmapMarkdownH2 = { fg = "#e0af68" }, -- Yellow
-	XmapMarkdownH3 = { fg = "#9ece6a" }, -- Green
-	XmapMarkdownH4 = { fg = "#565f89" }, -- Gray
-	XmapMarkdownH5 = { fg = "#565f89" }, -- Gray
-	XmapMarkdownH6 = { fg = "#565f89" }, -- Gray
+	XmapFunction = { fg = "#7aa2f7", bold = true }, -- AI HINTS: Blue
+	XmapClass = { fg = "#bb9af7", bold = true }, -- AI HINTS: Purple
+	XmapVariable = { fg = "#9ece6a" }, -- AI HINTS: Green
+	XmapSwiftKeyword = { fg = "#bb9af7" }, -- AI HINTS: Purple
+	XmapRelativeUp = { fg = "#9ece6a", bold = true }, -- AI HINTS: Green
+	XmapRelativeDown = { fg = "#f7768e", bold = true }, -- AI HINTS: Red
+	XmapRelativeCurrent = { fg = "#e0af68", bold = true }, -- AI HINTS: Yellow
+	XmapRelativeNumber = { fg = "#c0caf5", bold = true }, -- AI HINTS: Bright
+	XmapRelativeKeyword = { fg = "#bb9af7", bold = true }, -- AI HINTS: Purple (keywords)
+	XmapRelativeEntity = { fg = "#7dcfff" }, -- AI HINTS: Cyan (entity names)
+	XmapMarkdownH1 = { fg = "#f7768e" }, -- AI HINTS: Red
+	XmapMarkdownH2 = { fg = "#e0af68" }, -- AI HINTS: Yellow
+	XmapMarkdownH3 = { fg = "#9ece6a" }, -- AI HINTS: Green
+	XmapMarkdownH4 = { fg = "#565f89" }, -- AI HINTS: Gray
+	XmapMarkdownH5 = { fg = "#565f89" }, -- AI HINTS: Gray
+	XmapMarkdownH6 = { fg = "#565f89" }, -- AI HINTS: Gray
 }
 
 local function is_empty(tbl)
@@ -98,8 +98,8 @@ local function is_empty(tbl)
 end
 
 local function get_resolved_hl(name)
-	-- Request the fully-resolved highlight definition (no link indirection). If a theme
-	-- does not define the group, Neovim returns an empty table.
+	-- AI HINTS: Request the fully-resolved highlight definition (no link indirection). If a theme
+	-- AI HINTS: does not define the group, Neovim returns an empty table.
 	local ok, hl = pcall(vim.api.nvim_get_hl, 0, { name = name, link = false })
 	if not ok or is_empty(hl) then
 		return nil
@@ -108,9 +108,9 @@ local function get_resolved_hl(name)
 end
 
 local function apply_overrides(base, overrides)
-	-- Merge highlight definitions while supporting our convenience flags:
-	--   - `no_bg`: clear background even when the linked group has one
-	--   - `no_fg`: clear foreground even when the linked group has one
+	-- AI HINTS: Merge highlight definitions while supporting our convenience flags:
+	-- AI HINTS: - `no_bg`: clear background even when the linked group has one
+	-- AI HINTS: - `no_fg`: clear foreground even when the linked group has one
 	local out = vim.deepcopy(base or {})
 	for k, v in pairs(overrides or {}) do
 		if k ~= "link" and k ~= "no_bg" and k ~= "no_fg" then
@@ -166,11 +166,11 @@ local function adjust_color(color, amount)
 end
 
 local function derive_cursor_bg()
-	-- Derive a visible cursor background color when the colorscheme doesn't provide one.
-	-- Many transparent themes leave CursorLine.bg unset, so we try a few options:
-	--   1) CursorLine.bg
-	--   2) Visual.bg (often a good contrast)
-	--   3) a slight luminance adjustment of Normal.bg
+	-- AI HINTS: Derive a visible cursor background color when the colorscheme doesn't provide one.
+	-- AI HINTS: Many transparent themes leave CursorLine.bg unset, so we try a few options:
+	-- AI HINTS: 1) CursorLine.bg
+	-- AI HINTS: 2) Visual.bg (often a good contrast)
+	-- AI HINTS: 3) a slight luminance adjustment of Normal.bg
 	local cursor = get_resolved_hl("CursorLine")
 	local visual = get_resolved_hl("Visual")
 	local normal = get_resolved_hl("Normal")
@@ -194,8 +194,8 @@ local function derive_cursor_bg()
 end
 
 local function get_highlight_overrides()
-	-- User overrides live in config (`opts.highlights`). We read them here so `M.setup()`
-	-- can reapply everything on demand (e.g. after ColorScheme).
+	-- AI HINTS: User overrides live in config (`opts.highlights`). We read them here so `M.setup()`
+	-- AI HINTS: can reapply everything on demand (e.g. after ColorScheme).
 	local opts = config.get()
 	if type(opts.highlights) ~= "table" then
 		return {}
@@ -204,10 +204,10 @@ local function get_highlight_overrides()
 end
 
 local function normalize_override(value)
-	-- Convenience: allow both
-	--   highlights = { XmapText = "Comment" }
-	-- and
-	--   highlights = { XmapText = { link = "Comment", italic = true } }
+	-- AI HINTS: Convenience: allow both
+	-- AI HINTS: highlights = { XmapText = "Comment" }
+	-- AI HINTS: and
+	-- AI HINTS: highlights = { XmapText = { link = "Comment", italic = true } }
 	if type(value) == "string" then
 		return { link = value }
 	end
@@ -217,13 +217,13 @@ local function normalize_override(value)
 	return nil
 end
 
--- Setup highlight groups
+-- AI HINTS: Setup highlight groups
 function M.setup()
-	-- Called on plugin setup and on ColorScheme changes.
-	-- For each group:
-	--   - resolve the linked highlight (if it exists)
-	--   - apply fallback colors when missing
-	--   - layer user overrides on top
+	-- AI HINTS: Called on plugin setup and on ColorScheme changes.
+	-- AI HINTS: For each group:
+	-- AI HINTS: - resolve the linked highlight (if it exists)
+	-- AI HINTS: - apply fallback colors when missing
+	-- AI HINTS: - layer user overrides on top
 	local overrides = get_highlight_overrides()
 	for group_name, group_def in pairs(M.groups) do
 		local user_override = normalize_override(overrides[group_name])
@@ -233,8 +233,8 @@ function M.setup()
 		end
 
 		if group_name == "XmapCursor" and def.link then
-			-- Special-case: ensure the minimap cursor highlight is visible even on
-			-- transparent themes where CursorLine has no bg.
+			-- AI HINTS: Special-case: ensure the minimap cursor highlight is visible even on
+			-- AI HINTS: transparent themes where CursorLine has no bg.
 			local link_name = def.link
 			local link_hl = get_resolved_hl(link_name) or {}
 			local resolved = apply_overrides(link_hl, def)
@@ -266,34 +266,34 @@ function M.setup()
 	end
 end
 
--- Apply highlight to a buffer region
--- @param bufnr number: Buffer number
--- @param ns_id number: Namespace ID
--- @param hl_group string: Highlight group name
--- @param line number: Line number (0-indexed)
--- @param col_start number: Start column (0-indexed)
--- @param col_end number: End column (-1 for end of line)
+-- AI HINTS: Apply highlight to a buffer region
+-- INPUT: bufnr number: Buffer number
+-- INPUT: ns_id number: Namespace ID
+-- INPUT: hl_group string: Highlight group name
+-- INPUT: line number: Line number (0-indexed)
+-- INPUT: col_start number: Start column (0-indexed)
+-- INPUT: col_end number: End column (-1 for end of line)
 function M.apply(bufnr, ns_id, hl_group, line, col_start, col_end)
-	-- Highlights are best-effort. A bad range should not break the minimap update loop.
+	-- AI HINTS: Highlights are best-effort. A bad range should not break the minimap update loop.
 	pcall(vim.api.nvim_buf_add_highlight, bufnr, ns_id, hl_group, line, col_start, col_end)
 end
 
--- Clear highlights in buffer
+-- AI HINTS: Clear highlights in buffer
 function M.clear(bufnr, ns_id, line_start, line_end)
-	-- Clear an entire namespace (or a range) before re-applying highlights.
+	-- AI HINTS: Clear an entire namespace (or a range) before re-applying highlights.
 	line_start = line_start or 0
 	line_end = line_end or -1
 	pcall(vim.api.nvim_buf_clear_namespace, bufnr, ns_id, line_start, line_end)
 end
 
--- Create a namespace for xmap highlights
+-- AI HINTS: Create a namespace for xmap highlights
 function M.create_namespace(name)
-	-- Namespaces isolate different highlight layers (viewport/cursor/syntax/structure)
-	-- so they can be cleared independently.
+	-- AI HINTS: Namespaces isolate different highlight layers (viewport/cursor/syntax/structure)
+	-- AI HINTS: so they can be cleared independently.
 	return vim.api.nvim_create_namespace("xmap_" .. name)
 end
 
--- Refresh all highlight groups (useful when colorscheme changes)
+-- AI HINTS: Refresh all highlight groups (useful when colorscheme changes)
 function M.refresh()
 	M.setup()
 end

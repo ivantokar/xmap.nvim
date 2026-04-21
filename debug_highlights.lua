@@ -1,5 +1,5 @@
--- Debug script to check actual highlight values
--- Run with: :luafile debug_highlights.lua
+-- AI HINTS: Debug script to check actual highlight values
+-- AI HINTS: Run with: :luafile debug_highlights.lua
 
 print("=== Current Xmap Highlight Groups ===\n")
 
@@ -22,7 +22,7 @@ end
 
 print("\n=== Checking if split_entity is working ===")
 local nav = require("xmap.navigation")
--- Test the entity format
+-- AI HINTS: Test the entity format
 local test_entity = "func sendRequest"
 print("Input: '" .. test_entity .. "'")
 local keyword, name = test_entity:match("^(%S+)%s+(.+)$")

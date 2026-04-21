@@ -1,37 +1,37 @@
--- lua/xmap/navigation.lua
--- Copyright (c) Ivan Tokar. MIT License.
--- Navigation and jumping logic for xmap.nvim
+-- AI HINTS: lua/xmap/navigation.lua
+-- AI HINTS: Copyright (c) Ivan Tokar. MIT License.
+-- AI HINTS: Navigation and jumping logic for xmap.nvim
 --
--- This module is responsible for moving between the minimap and the main buffer.
--- It is intentionally kept separate from rendering so that:
---   - minimap.lua can focus on "what to show"
---   - navigation.lua can focus on "how to move/jump"
+-- AI HINTS: This module is responsible for moving between the minimap and the main buffer.
+-- AI HINTS: It is intentionally kept separate from rendering so that:
+-- AI HINTS: - minimap.lua can focus on "what to show"
+-- AI HINTS: - navigation.lua can focus on "how to move/jump"
 --
--- Key ideas:
---   - The minimap buffer is a derived view: not every source line is necessarily rendered.
---   - `minimap.state.line_mapping` maps minimap-line -> source-line (both 1-indexed).
---   - Jump/preview operations always resolve through that mapping when available.
+-- AI HINTS: Key ideas:
+-- AI HINTS: - The minimap buffer is a derived view: not every source line is necessarily rendered.
+-- AI HINTS: - `minimap.state.line_mapping` maps minimap-line -> source-line (both 1-indexed).
+-- AI HINTS: - Jump/preview operations always resolve through that mapping when available.
 
 local config = require("xmap.config")
 
 local M = {}
 
 local function clamp(value, min_value, max_value)
-  -- Common helper: keep a number within a safe range.
+  -- AI HINTS: Common helper: keep a number within a safe range.
   return math.max(min_value, math.min(value, max_value))
 end
 
--- Module-local state tracking (used mainly for UX / debugging).
+-- AI HINTS: Module-local state tracking (used mainly for UX / debugging).
 M.state = {
-  minimap_cursor_line = 1, -- Current line in minimap (1-indexed)
-  last_jump_line = nil, -- Last line jumped to
+  minimap_cursor_line = 1, -- AI HINTS: Current line in minimap (1-indexed)
+  last_jump_line = nil, -- AI HINTS: Last line jumped to
 }
 
--- Get current line in main buffer
--- @param winid number: Window ID of main buffer
--- @return number: Current line (1-indexed)
+-- AI HINTS: Get current line in main buffer
+-- INPUT: winid number: Window ID of main buffer
+-- OUTPUT: number: Current line (1-indexed)
 function M.get_main_cursor_line(winid)
-  -- Defensive: if a window is invalid (e.g. closed) just return a safe default.
+  -- AI HINTS: Defensive: if a window is invalid (e.g. closed) just return a safe default.
   if not winid or not vim.api.nvim_win_is_valid(winid) then
     return 1
   end
@@ -40,38 +40,38 @@ function M.get_main_cursor_line(winid)
   return cursor[1]
 end
 
--- Jump from minimap to main buffer
--- @param minimap_bufnr number: Minimap buffer number
--- @param minimap_winid number: Minimap window ID
--- @param main_bufnr number: Main buffer number
--- @param main_winid number: Main window ID
+-- AI HINTS: Jump from minimap to main buffer
+-- INPUT: minimap_bufnr number: Minimap buffer number
+-- INPUT: minimap_winid number: Minimap window ID
+-- INPUT: main_bufnr number: Main buffer number
+-- INPUT: main_winid number: Main window ID
 function M.jump_to_line(minimap_bufnr, minimap_winid, main_bufnr, main_winid)
-  -- Jump is triggered from inside the minimap (default: <CR>).
+  -- AI HINTS: Jump is triggered from inside the minimap (default: <CR>).
   if not vim.api.nvim_win_is_valid(minimap_winid) or not vim.api.nvim_win_is_valid(main_winid) then
     return
   end
 
-  -- Get current cursor position in minimap
+  -- AI HINTS: Get current cursor position in minimap
   local cursor = vim.api.nvim_win_get_cursor(minimap_winid)
   local minimap_line = cursor[1]
 
-  -- Get line mapping from minimap state
+  -- AI HINTS: Get line mapping from minimap state
   local minimap = require("xmap.minimap")
   local line_mapping = minimap.state.line_mapping
 
-  -- Map minimap line to actual source line
+  -- AI HINTS: Map minimap line to actual source line
   local target_line = line_mapping[minimap_line] or minimap_line
 
-  -- Get total lines in main buffer
+  -- AI HINTS: Get total lines in main buffer
   local main_line_count = vim.api.nvim_buf_line_count(main_bufnr)
 
-  -- Clamp to valid range
+  -- AI HINTS: Clamp to valid range
   target_line = math.max(1, math.min(target_line, main_line_count))
 
-  -- Jump to the line in main buffer
+  -- AI HINTS: Jump to the line in main buffer
   vim.api.nvim_win_set_cursor(main_winid, { target_line, 0 })
 
-  -- Center the view if configured
+  -- AI HINTS: Center the view if configured
   local opts = config.get()
   if opts.navigation.auto_center then
     vim.api.nvim_win_call(main_winid, function()
@@ -79,22 +79,22 @@ function M.jump_to_line(minimap_bufnr, minimap_winid, main_bufnr, main_winid)
     end)
   end
 
-  -- Focus main window
+  -- AI HINTS: Focus main window
   vim.api.nvim_set_current_win(main_winid)
 
-  -- Store last jump
+  -- AI HINTS: Store last jump
   M.state.last_jump_line = target_line
 end
 
--- Center main editor on the current minimap selection without changing focus.
--- Intended for "preview navigation" while the minimap is focused.
--- @param minimap_winid number
--- @param main_bufnr number
--- @param main_winid number
--- @param line_mapping table|nil
+-- AI HINTS: Center main editor on the current minimap selection without changing focus.
+-- AI HINTS: Intended for "preview navigation" while the minimap is focused.
+-- INPUT: minimap_winid number
+-- INPUT: main_bufnr number
+-- INPUT: main_winid number
+-- INPUT: line_mapping table|nil
 function M.center_main_on_minimap_cursor(minimap_winid, main_bufnr, main_winid, line_mapping)
-  -- This is used by `navigation.follow_cursor`: while the minimap is focused, moving
-  -- the minimap cursor previews/centers the main buffer at that location.
+  -- AI HINTS: This is used by `navigation.follow_cursor`: while the minimap is focused, moving
+  -- AI HINTS: the minimap cursor previews/centers the main buffer at that location.
   if not (vim.api.nvim_win_is_valid(minimap_winid) and vim.api.nvim_win_is_valid(main_winid)) then
     return
   end
@@ -124,10 +124,10 @@ function M.center_main_on_minimap_cursor(minimap_winid, main_bufnr, main_winid, 
   end
 end
 
--- Update minimap cursor to follow main buffer
--- @param minimap_winid number: Minimap window ID
--- @param main_line number: Current line in main buffer (1-indexed)
--- @param line_mapping table|nil: Minimap line -> source line mapping (1-indexed source lines)
+-- AI HINTS: Update minimap cursor to follow main buffer
+-- INPUT: minimap_winid number: Minimap window ID
+-- INPUT: main_line number: Current line in main buffer (1-indexed)
+-- INPUT: line_mapping table|nil: Minimap line -> source line mapping (1-indexed source lines)
 function M.update_minimap_cursor(minimap_winid, main_line, line_mapping)
   if not vim.api.nvim_win_is_valid(minimap_winid) then
     return
@@ -136,8 +136,8 @@ function M.update_minimap_cursor(minimap_winid, main_line, line_mapping)
   local minimap_line = main_line
 
   if type(line_mapping) == "table" and #line_mapping > 0 then
-    -- Pick the nearest rendered minimap line at-or-before the main cursor.
-    -- We do a binary search because line_mapping is sorted by source line and can be large.
+    -- AI HINTS: Pick the nearest rendered minimap line at-or-before the main cursor.
+    -- AI HINTS: We do a binary search because line_mapping is sorted by source line and can be large.
     local lo, hi = 1, #line_mapping
     local best = 1
 
@@ -162,8 +162,8 @@ function M.update_minimap_cursor(minimap_winid, main_line, line_mapping)
   M.state.minimap_cursor_line = minimap_line
 end
 
--- Focus the minimap window
--- @param minimap_winid number: Minimap window ID
+-- AI HINTS: Focus the minimap window
+-- INPUT: minimap_winid number: Minimap window ID
 function M.focus_minimap(minimap_winid)
   if not minimap_winid or not vim.api.nvim_win_is_valid(minimap_winid) then
     vim.notify("Minimap window not found", vim.log.levels.WARN)
@@ -173,9 +173,9 @@ function M.focus_minimap(minimap_winid)
   vim.api.nvim_set_current_win(minimap_winid)
 end
 
--- Get visible line range in main window
--- @param winid number: Window ID
--- @return table: { start = number, end = number } (1-indexed)
+-- AI HINTS: Get visible line range in main window
+-- INPUT: winid number: Window ID
+-- OUTPUT: table: { start = number, end = number } (1-indexed)
 function M.get_visible_range(winid)
   if not winid or not vim.api.nvim_win_is_valid(winid) then
     return { start = 1, ["end"] = 1 }
@@ -192,19 +192,19 @@ function M.get_visible_range(winid)
   }
 end
 
--- Set up keymaps for minimap buffer
--- @param minimap_bufnr number: Minimap buffer number
--- @param minimap_winid number: Minimap window ID
--- @param main_bufnr number: Main buffer number
--- @param main_winid number: Main window ID
+-- AI HINTS: Set up keymaps for minimap buffer
+-- INPUT: minimap_bufnr number: Minimap buffer number
+-- INPUT: minimap_winid number: Minimap window ID
+-- INPUT: main_bufnr number: Main buffer number
+-- INPUT: main_winid number: Main window ID
 function M.setup_minimap_keymaps(minimap_bufnr, minimap_winid, main_bufnr, main_winid)
   local opts = config.get()
 
-  -- Jump to line mapping
+  -- AI HINTS: Jump to line mapping
   if opts.keymaps.jump then
     vim.keymap.set("n", opts.keymaps.jump, function()
-      -- The minimap can "follow" different main buffers over time (buffer switching).
-      -- Always resolve the *current* target buffer/window from minimap state.
+      -- AI HINTS: The minimap can "follow" different main buffers over time (buffer switching).
+      -- AI HINTS: Always resolve the *current* target buffer/window from minimap state.
       local minimap = require("xmap.minimap")
       local current_main_bufnr = minimap.state.main_bufnr
       local current_main_winid = minimap.state.main_winid
@@ -222,7 +222,7 @@ function M.setup_minimap_keymaps(minimap_bufnr, minimap_winid, main_bufnr, main_
       end
 
       if not current_main_winid then
-        -- Fall back to "any window currently showing the target buffer".
+        -- AI HINTS: Fall back to "any window currently showing the target buffer".
         for _, winid in ipairs(vim.api.nvim_list_wins()) do
           if vim.api.nvim_win_get_buf(winid) == current_main_bufnr then
             current_main_winid = winid
@@ -239,7 +239,7 @@ function M.setup_minimap_keymaps(minimap_bufnr, minimap_winid, main_bufnr, main_
     end, { buffer = minimap_bufnr, silent = true, desc = "Jump to line" })
   end
 
-  -- Close minimap mapping
+  -- AI HINTS: Close minimap mapping
   if opts.keymaps.close then
     vim.keymap.set("n", opts.keymaps.close, function()
       require("xmap").close()

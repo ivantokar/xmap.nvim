@@ -1,38 +1,46 @@
-.PHONY: test test-swift test-lua test-ts test-tsx test-follow dev clean install-local
+.PHONY: test test-swift test-lua test-ts test-tsx test-c test-cpp test-follow dev clean install-local
 
-# Test with minimal config (default: Swift)
+# AI HINTS: Test with minimal config (default: Swift)
 test:
 	nvim -u test_config.lua test.swift
 
-# Test with Swift file
+# AI HINTS: Test with Swift file
 test-swift:
 	nvim -u test_config.lua test.swift
 
-# Test with Lua file
+# AI HINTS: Test with Lua file
 test-lua:
 	nvim -u test_config.lua test.lua
 
-# Test with TypeScript file
+# AI HINTS: Test with TypeScript file
 test-ts:
 	nvim -u test_config.lua test.ts
 
-# Test with TSX file
+# AI HINTS: Test with TSX file
 test-tsx:
 	nvim -u test_config.lua test.tsx
 
-# Headless QA regression checks
+# AI HINTS: Test with C file
+test-c:
+	nvim -u test_config.lua test.c
+
+# AI HINTS: Test with C++ file
+test-cpp:
+	nvim -u test_config.lua test.cpp
+
+# AI HINTS: Headless QA regression checks
 test-follow:
 	nvim --headless -n -i NONE -u test_config.lua -c "lua dofile('scripts/qa_follow_active_buffer.lua')"
 
-# Open for development (uses your actual config)
+# AI HINTS: Open for development (uses your actual config)
 dev:
 	nvim -c "set rtp+=." test.swift
 
-# Clean generated files
+# AI HINTS: Clean generated files
 clean:
 	rm -f profile.log
 
-# Create symlink for local development with lazy.nvim
+# AI HINTS: Create symlink for local development with lazy.nvim
 install-local:
 	@echo "Add this to your lazy.nvim config:"
 	@echo ""
@@ -44,7 +52,7 @@ install-local:
 	@echo "  end,"
 	@echo "}"
 
-# Help
+# AI HINTS: Help
 help:
 	@echo "xmap.nvim development commands:"
 	@echo ""
@@ -53,6 +61,8 @@ help:
 	@echo "  make test-lua    - Test with Lua file"
 	@echo "  make test-ts     - Test with TypeScript file"
 	@echo "  make test-tsx    - Test with TSX file"
+	@echo "  make test-c      - Test with C file"
+	@echo "  make test-cpp    - Test with C++ file"
 	@echo "  make dev         - Open for development with your config"
 	@echo "  make clean       - Clean generated files"
 	@echo "  make install-local - Show lazy.nvim local config"

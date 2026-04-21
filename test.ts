@@ -1,6 +1,6 @@
-// Test TypeScript file for xmap.nvim
-// This file contains various TypeScript structures to test the minimap provider
-// (This header block should be suppressed in the minimap)
+// AI HINTS: Test TypeScript file for xmap.nvim
+// AI HINTS: This file contains various TypeScript structures to test the minimap provider
+// AI HINTS: (This header block should be suppressed in the minimap)
 
 export interface User {
   id: number
@@ -50,9 +50,9 @@ class UserManager {
     console.log("clicked", id)
   }
 
-  // MARK: - Users
-  // TODO: Add persistence
-  // FIXME: Handle duplicates
+  // AI HINTS: MARK: - Users
+  // AI HINTS: TODO: Add persistence
+  // AI HINTS: FIXME: Handle duplicates
 }
 
 namespace Utils {
