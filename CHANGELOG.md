@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.8.1 - 2026-04-21
+
+- Refactor C/C++ provider comments to Familiar AI contract format (`PURPOSE`, `INPUT`, `OUTPUT`, `CONSTRAINTS`, `AI HINTS`) without behavior changes.
+- Convert C/C++ alias file comments (`cc`, `cxx`, `h`, `hpp`) to AI contract style for deterministic mapping intent.
+- Update core module contract headers in `lua/xmap/config.lua` and `lua/xmap/init.lua`.
+- Bump plugin version string to `0.8.1`.
+
 ## 0.8.0 - 2026-04-21
 
 - Add bundled C and C++ providers (`c`, `cpp`) with symbol extraction for functions, types (`struct`/`class`/`enum`/`union`), aliases (`typedef`/`using`), macros (`#define`), and return statements.

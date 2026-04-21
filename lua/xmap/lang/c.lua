@@ -1,11 +1,14 @@
 -- lua/xmap/lang/c.lua
 -- Copyright (c) Ivan Tokar. MIT License.
--- C language support for xmap.nvim
+-- PURPOSE: Provide C-language symbol/comment extraction for xmap minimap.
+-- DEPENDENCIES: Neovim Lua API (`vim.*`) and xmap language loader.
+-- CONSTRAINTS: Keep provider pure; no buffer/window mutation.
+-- STABILITY: Core
 
 local M = {}
 
--- Keywords recognized by the C provider when no user override is configured.
--- These drive symbol extraction and default minimap highlight categories.
+-- PURPOSE: Default symbol classes used when user config does not override `symbols.c.keywords`.
+-- OUTPUT: Ordered keyword list consumed by symbol filtering/highlighting.
 M.default_symbol_keywords = {
 	"function",
 	"struct",
@@ -27,9 +30,10 @@ local CONTROL_KEYWORDS = {
 	["sizeof"] = true,
 }
 
--- Tree-sitter query variants are tried in order by the core language engine.
--- Variant 1 is the richest C grammar shape; variant 2 is a compatibility
--- fallback for parser builds that do not expose all captures.
+-- PURPOSE: Query fallbacks ordered from richest -> most compatible.
+-- DO: Keep first variant as preferred parse surface.
+-- DO NOT: Remove fallback variant without parser-compat evidence.
+-- STABILITY: Flexible
 local QUERY_VARIANTS = {
 	[[
     (function_definition) @function
@@ -58,9 +62,13 @@ local function ltrim(text)
 	return (text:gsub("^%s+", ""))
 end
 
--- Remove declaration modifiers iteratively from the beginning of a line so the
--- symbol parser can focus on the core construct.
--- Example: `static inline const int foo(...)` -> `int foo(...)`.
+-- PURPOSE: Normalize declaration prefixes before pattern-based symbol parsing.
+-- INPUT: Raw source line text.
+-- OUTPUT: Same line without known leading declaration modifiers.
+-- ALGORITHM:
+-- - Trim leading whitespace.
+-- - Iteratively strip known modifiers until no change.
+-- CONSTRAINTS: Strip only leading tokens; preserve semantic tail.
 local function strip_modifiers(text)
 	local out = ltrim(text)
 	local changed = true
@@ -91,16 +99,21 @@ local function strip_modifiers(text)
 end
 
 function M.parse_symbol(line_text)
-	-- Parse from a sanitized line to keep pattern logic predictable across
-	-- declaration styles and formatting variations.
+	-- PURPOSE: Map one C line to a minimap symbol descriptor or nil.
+	-- INPUT: `line_text` (string|nil), may include modifiers/comments/spacing noise.
+	-- OUTPUT: Table `{ keyword, capture_type, display }` or nil.
+	-- DO:
+	-- - Prefer explicit constructs (`#define`, `return`, type declarations).
+	-- - Avoid control keywords as function names.
+	-- CONSTRAINTS: Pattern-only parser; no Tree-sitter dependency here.
+	-- AI HINTS: Extend by adding guarded parsing blocks; do not reorder broad regexes before specific cases.
 	local cleaned = strip_modifiers(line_text or "")
 	if cleaned == "" then
 		return nil
 	end
 
 	do
-		-- Preprocessor macro definitions are represented as variables in minimap
-		-- capture taxonomy, but rendered with explicit `#define` text.
+		-- PURPOSE: Render preprocessor define as navigable symbol.
 		local macro = cleaned:match("^#%s*define%s+([%w_]+)")
 		if macro then
 			return { keyword = "define", capture_type = "variable", display = "#define " .. macro }
@@ -108,8 +121,7 @@ function M.parse_symbol(line_text)
 	end
 
 	if cleaned == "return" or cleaned:match("^return%f[%W]") then
-		-- Keep return statements visible as control-flow markers. Tail expression
-		-- is preserved when present (`return value;` -> `return value`).
+		-- PURPOSE: Surface control-flow return markers with optional tail expression.
 		local rest = vim.trim((cleaned:gsub("^return", "", 1))):gsub(";+$", "")
 		local display = "return"
 		if rest ~= "" then
@@ -119,7 +131,7 @@ function M.parse_symbol(line_text)
 	end
 
 	do
-		-- Named type declarations provide high-value navigation anchors.
+		-- PURPOSE: Detect named type declarations.
 		local keyword, name = cleaned:match("^(struct)%s+([%w_]+)")
 			or cleaned:match("^(union)%s+([%w_]+)")
 			or cleaned:match("^(enum)%s+([%w_]+)")
@@ -129,8 +141,7 @@ function M.parse_symbol(line_text)
 	end
 
 	do
-		-- Track typedef alias names (including pointer/function typedef forms)
-		-- as class-like type symbols in the minimap.
+		-- PURPOSE: Detect typedef aliases as type symbols.
 		local alias = cleaned:match("^typedef%s+.-([%w_]+)%s*;")
 		if alias then
 			return { keyword = "typedef", capture_type = "class", display = "typedef " .. alias }
@@ -138,7 +149,7 @@ function M.parse_symbol(line_text)
 	end
 
 	do
-		-- Simple function signature, e.g. `foo(...)` with optional `{` or `;`.
+		-- PURPOSE: Detect untyped/simple function signatures.
 		local name = cleaned:match("^([%a_][%w_]*)%s*%b()%s*[{;]")
 		if name and not CONTROL_KEYWORDS[name] then
 			return { keyword = "function", capture_type = "function", display = "function " .. name }
@@ -146,8 +157,7 @@ function M.parse_symbol(line_text)
 	end
 
 	do
-		-- Typed function signature, e.g. `int foo(...)`, including pointer-heavy
-		-- declarations. Control keywords are excluded explicitly.
+		-- PURPOSE: Detect typed function signatures (incl. pointer-heavy declarations).
 		local name = cleaned:match("^[%w_%s%*]+%s+([%a_][%w_]*)%s*%b()%s*[{;]")
 		if name and not CONTROL_KEYWORDS[name] then
 			return { keyword = "function", capture_type = "function", display = "function " .. name }
@@ -158,6 +168,9 @@ function M.parse_symbol(line_text)
 end
 
 function M.is_comment_line(trimmed)
+	-- PURPOSE: Fast gate for comment-line rendering path.
+	-- INPUT: Trimmed line.
+	-- OUTPUT: Boolean.
 	return trimmed:match("^//")
 		or trimmed:match("^/%*")
 		or trimmed:match("^%*/")
@@ -166,15 +179,18 @@ function M.is_comment_line(trimmed)
 end
 
 function M.extract_comment(line)
+	-- PURPOSE: Normalize comment text and marker metadata for minimap rendering.
+	-- INPUT: Raw line.
+	-- OUTPUT: `text, marker, false, raw_text` or nil tuple.
+	-- CONSTRAINTS: Keep output shape compatible with existing provider interface.
 	local trimmed = vim.trim(line)
-	-- Normalize single-line and block comment prefixes to plain comment text.
 	local text = trimmed:gsub("^//+%s*", ""):gsub("^/%*+%s*", ""):gsub("^%*+%s*", ""):gsub("%s*%*/$", "")
 	if text == "" then
 		return nil, nil, false
 	end
 
 	local marker = nil
-	-- Recognized markers are rendered with dedicated marker styling in minimap.
+	-- DO: Parse marker prefixes used by current highlight contract.
 	if text:match("^TODO:") then
 		marker = "TODO"
 		text = text:gsub("^TODO:%s*", "")
@@ -196,8 +212,7 @@ function M.extract_comment(line)
 	end
 
 	local raw_text = text
-	-- Keep minimap comment rows compact; preserve full text separately for
-	-- future consumers that may need untruncated content.
+	-- CONSTRAINTS: Keep minimap rows compact; preserve non-truncated `raw_text`.
 	if #text > 35 then
 		text = text:sub(1, 32) .. "..."
 	end
@@ -206,6 +221,8 @@ function M.extract_comment(line)
 end
 
 function M.render_comment(line)
+	-- PURPOSE: Convert extracted comment tuple into renderer-ready payload.
+	-- OUTPUT: `{ kind=\"marker\"|\"comment\", ... }` or nil.
 	local text, marker = M.extract_comment(line)
 	if marker then
 		return { kind = "marker", marker = marker, text = text or "" }

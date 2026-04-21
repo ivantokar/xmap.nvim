@@ -1,13 +1,11 @@
 -- lua/xmap/init.lua
 -- Copyright (c) Ivan Tokar. MIT License.
--- Main API for xmap.nvim
---
--- This module is the public entry point used by users:
---   require("xmap").setup({ ... })
---   :XmapToggle / :XmapOpen / :XmapClose / :XmapRefresh / :XmapFocus
---
--- It wires together the internal modules (config/highlight/treesitter/minimap/navigation)
--- and exposes a small stable API surface.
+-- PURPOSE: Public API entrypoint for xmap plugin lifecycle and commands.
+-- INPUT: User config via `setup(opts)` and command-driven calls (`open`, `toggle`, `focus`).
+-- OUTPUT: Stable API surface wrapping internal modules.
+-- DEPENDENCIES: config, highlight, treesitter, minimap, navigation modules.
+-- CONSTRAINTS: Keep API backward-compatible for user init.lua and exposed commands.
+-- STABILITY: Core
 
 local M = {}
 
@@ -284,7 +282,7 @@ function M.diagnose()
   print("=== End Diagnostics ===")
 end
 
--- Get plugin version
-M.version = "0.7.0"
+-- PURPOSE: Semantic plugin version exposed for diagnostics/tooling.
+M.version = "0.8.1"
 
 return M

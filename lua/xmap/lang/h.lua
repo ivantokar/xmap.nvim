@@ -1,4 +1,6 @@
 -- lua/xmap/lang/h.lua
--- `.h` defaults to the C provider to keep legacy C headers stable.
--- Projects that use C++ semantics in `.h` can override filetype mapping.
+-- PURPOSE: Alias `h` headers to C provider by default.
+-- DO: Preserve legacy C-header behavior as default mapping.
+-- AI HINTS: If project expects C++ semantics for `.h`, override filetype mapping in user config.
+-- STABILITY: Flexible
 return require("xmap.lang.c")

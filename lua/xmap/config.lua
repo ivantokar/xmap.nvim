@@ -1,25 +1,15 @@
 -- lua/xmap/config.lua
 -- Copyright (c) Ivan Tokar. MIT License.
--- Configuration management for xmap.nvim
---
--- Responsibilities:
---   - define default options
---   - merge user config into defaults (`setup`)
---   - answer "is this filetype supported?" (`is_filetype_supported`)
---   - answer "should Tree-sitter run for this filetype?" (`is_treesitter_enabled`)
---
--- Language support is provider-driven:
--- a filetype is supported only when it is included in `filetypes` AND a provider module exists
--- at `lua/xmap/lang/<filetype>.lua`. This keeps core logic SOLID and makes it easy to add
--- new languages later without editing core modules.
+-- PURPOSE: Centralize config defaults + runtime config checks for xmap.
+-- OUTPUT: Stable config table via `get()`, support predicates via helper APIs.
+-- DEPENDENCIES: `xmap.lang` provider registry for filetype availability checks.
+-- CONSTRAINTS: Config module must not open/close windows or mutate editor layout.
+-- STABILITY: Core
 
 local M = {}
 
--- Bundled languages. Additional languages can be added by installing/creating a
--- matching provider module under `lua/xmap/lang/<filetype>.lua` and adding the
--- filetype to `filetypes` (and `treesitter.languages` if desired).
--- Default provider set now includes C-family filetypes:
--- `h` maps to the C provider and `hpp` maps to the C++ provider.
+-- PURPOSE: Built-in provider filetypes.
+-- AI HINTS: Add new filetypes only with matching provider module at `lua/xmap/lang/<filetype>.lua`.
 local DEFAULT_FILETYPES = { "swift", "typescript", "typescriptreact", "lua", "markdown", "c", "cpp", "h", "hpp" }
 
 local function get_default_filetypes()
@@ -153,9 +143,8 @@ M.defaults = {
 -- Current user configuration
 M.options = {}
 
--- Setup function to merge user config with defaults
+-- PURPOSE: Merge user options over defaults.
 function M.setup(user_config)
-	-- Deep-merge so users can override only the parts they care about.
 	M.options = vim.tbl_deep_extend("force", M.defaults, user_config or {})
 	return M.options
 end
@@ -168,10 +157,9 @@ function M.get()
 	return M.options
 end
 
--- Check if filetype is supported
 function M.is_filetype_supported(filetype)
-	-- Support is a combination of user config + installed providers.
-	-- This makes it possible to add new language support without editing this module.
+	-- PURPOSE: Return true only when filetype is allowed by config and provider exists.
+	-- CONSTRAINTS: Require both include-list membership and provider availability.
 	local opts = M.get()
 
 	-- Check if in exclude list
@@ -184,15 +172,12 @@ function M.is_filetype_supported(filetype)
 		return false
 	end
 
-	-- A filetype is only supported when a provider module exists (e.g. xmap.lang.swift).
 	local lang = require("xmap.lang")
 	return lang.supports(filetype)
 end
 
--- Check if Tree-sitter is enabled for current language
 function M.is_treesitter_enabled(filetype)
-	-- Tree-sitter can be enabled/disabled globally (`treesitter.enable`) and also
-	-- restricted to a subset of filetypes (`treesitter.languages`).
+	-- PURPOSE: Return true only when Tree-sitter is globally enabled and filetype is allowed.
 	local opts = M.get()
 	if not opts.treesitter.enable then
 		return false

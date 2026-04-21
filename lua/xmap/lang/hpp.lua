@@ -1,3 +1,5 @@
 -- lua/xmap/lang/hpp.lua
--- `.hpp` uses the C++ provider to match canonical C++ header conventions.
+-- PURPOSE: Alias `hpp` headers to C++ provider.
+-- CONSTRAINTS: No custom logic; keep passthrough require only.
+-- STABILITY: Core
 return require("xmap.lang.cpp")

@@ -1,3 +1,5 @@
 -- lua/xmap/lang/cc.lua
--- `cc` is treated as a C++ synonym and reuses the C++ provider.
+-- PURPOSE: Alias `cc` filetype to canonical C++ provider.
+-- CONSTRAINTS: No custom logic; keep passthrough require only.
+-- STABILITY: Core
 return require("xmap.lang.cpp")
