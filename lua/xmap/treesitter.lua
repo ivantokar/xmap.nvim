@@ -1,18 +1,9 @@
--- AI HINTS: lua/xmap/treesitter.lua
--- AI HINTS: Copyright (c) Ivan Tokar. MIT License.
--- AI HINTS: Tree-sitter integration for xmap.nvim
---
--- AI HINTS: This module is intentionally small and generic:
--- AI HINTS: - It hides the optional dependency on `nvim-treesitter`.
--- AI HINTS: - It compiles and caches Tree-sitter queries per filetype.
--- AI HINTS: - It exposes helpers to map captures to icons/highlight groups.
---
--- AI HINTS: Language-specific query strings do NOT live here. They come from provider modules
--- AI HINTS: (`lua/xmap/lang/<filetype>.lua`) via `provider.get_query()` / `provider.get_queries()`.
+-- PURPOSE:
+-- - Hide optional Tree-sitter integration behind a small cached API.
+-- CONSTRAINTS:
+-- - Query strings come from language providers, not this module.
 
 local M = {}
-
--- AI HINTS: Check if nvim-treesitter is available
 M.available = false
 
 local lang = require("xmap.lang")
@@ -25,8 +16,6 @@ local function is_non_empty_string(value)
 end
 
 local function resolve_treesitter_language(filetype)
-  -- AI HINTS: Many Neovim filetypes map to a different Tree-sitter language name
-  -- AI HINTS: (e.g. `typescriptreact` -> `tsx`). Resolve this mapping when possible.
   if type(filetype) ~= "string" or filetype == "" then
     return filetype
   end
@@ -46,11 +35,8 @@ local function resolve_treesitter_language(filetype)
 end
 
 local function get_query_candidates(filetype)
-  -- AI HINTS: Providers may expose either:
-  -- AI HINTS: - `get_queries()` -> { "query v3", "query v2", ... } (preferred)
-  -- AI HINTS: - `get_query()` -> "query v1"
-  --
-  -- AI HINTS: We try candidates in order and cache the first one that parses successfully.
+  -- PURPOSE:
+  -- - Accept provider query fallbacks without hard-coding provider shapes downstream.
   local provider = lang.get(filetype)
   if not provider then
     return {}
@@ -74,7 +60,8 @@ local function get_query_candidates(filetype)
 end
 
 local function get_compiled_query(filetype)
-  -- AI HINTS: Cache "misses" as `false` so we don't keep trying to parse broken queries.
+  -- CONSTRAINTS:
+  -- - Cache failed lookups as `false` to avoid repeated parse work and warnings.
   if M._compiled_queries[filetype] ~= nil then
     return M._compiled_queries[filetype] or nil
   end
@@ -99,10 +86,7 @@ local function get_compiled_query(filetype)
   M._compiled_queries[filetype] = false
   return nil, last_error
 end
-
--- AI HINTS: Initialize Tree-sitter integration
 function M.setup()
-  -- AI HINTS: Check if nvim-treesitter is installed
   local ok, _ = pcall(require, "nvim-treesitter")
   M.available = ok
 
@@ -115,10 +99,6 @@ function M.setup()
 
   return M.available
 end
-
--- AI HINTS: Get parser for buffer
--- INPUT: bufnr number: Buffer number
--- OUTPUT: parser|nil: Tree-sitter parser or nil if not available
 function M.get_parser(bufnr)
   if not M.available then
     return nil
@@ -131,10 +111,6 @@ function M.get_parser(bufnr)
 
   return parser
 end
-
--- AI HINTS: Get syntax tree for buffer
--- INPUT: bufnr number: Buffer number
--- OUTPUT: tree|nil: Syntax tree or nil if not available
 function M.get_tree(bufnr)
   local parser = M.get_parser(bufnr)
   if not parser then
@@ -144,11 +120,6 @@ function M.get_tree(bufnr)
   local trees = parser:parse()
   return trees and trees[1] or nil
 end
-
--- AI HINTS: Extract structural nodes (functions, classes, etc.) from buffer
--- INPUT: bufnr number: Buffer number
--- INPUT: filetype string: Filetype
--- OUTPUT: table: List of nodes with their positions and types
 function M.get_structural_nodes(bufnr, filetype)
   if not M.available then
     return {}
@@ -166,7 +137,8 @@ function M.get_structural_nodes(bufnr, filetype)
 
   local query, last_error = get_compiled_query(filetype)
   if not query then
-    -- AI HINTS: We warn only once per filetype to avoid spamming on cursor moves.
+    -- DO:
+    -- - Warn once per filetype.
     if not M._query_error_shown[filetype] then
       vim.notify(string.format("xmap.nvim: Failed to parse Tree-sitter query for %s", filetype), vim.log.levels.WARN)
       M._query_error_shown[filetype] = true
@@ -176,13 +148,9 @@ function M.get_structural_nodes(bufnr, filetype)
 
   local nodes = {}
   local root = tree:root()
-
-  -- AI HINTS: Execute query and collect nodes
   for id, node in query:iter_captures(root, bufnr, 0, -1) do
     local capture_name = query.captures[id]
     local start_row, start_col, end_row, end_col = node:range()
-
-    -- AI HINTS: We store both the capture name and the range so callers can highlight and map to lines.
     table.insert(nodes, {
       type = capture_name,
       start_line = start_row,
@@ -192,29 +160,21 @@ function M.get_structural_nodes(bufnr, filetype)
       node = node,
     })
   end
-
-  -- AI HINTS: Sort by start line
   table.sort(nodes, function(a, b)
     return a.start_line < b.start_line
   end)
 
   return nodes
 end
-
--- AI HINTS: Get the current scope/function at a given line
--- INPUT: bufnr number: Buffer number
--- INPUT: filetype string: Filetype
--- INPUT: line number: Line number (0-indexed)
--- OUTPUT: table|nil: Node containing the line, or nil
 function M.get_scope_at_line(bufnr, filetype, line)
   local nodes = M.get_structural_nodes(bufnr, filetype)
-
-  -- AI HINTS: Find the smallest scope containing this line
   local current_scope = nil
   local smallest_range = math.huge
 
   for _, node in ipairs(nodes) do
     if node.start_line <= line and line <= node.end_line then
+      -- ALGORITHM:
+      -- - Prefer the smallest enclosing node as the active scope.
       local range = node.end_line - node.start_line
       if range < smallest_range then
         smallest_range = range
@@ -225,13 +185,7 @@ function M.get_scope_at_line(bufnr, filetype, line)
 
   return current_scope
 end
-
--- AI HINTS: Get icon for node type
--- INPUT: node_type string: Type of node (from capture)
--- OUTPUT: string: Nerd Font icon
 function M.get_icon_for_type(node_type)
-  -- AI HINTS: Icons are intentionally limited to a small stable set so providers can map their
-  -- AI HINTS: parsed symbol kinds to these without leaking language specifics into core logic.
   local map = {
     ["class"] = "󰠱",
     ["function"] = "󰊕",
@@ -242,13 +196,7 @@ function M.get_icon_for_type(node_type)
 
   return map[node_type] or ""
 end
-
--- AI HINTS: Get highlight group for node type
--- INPUT: node_type string: Type of node (from capture)
--- OUTPUT: string: Highlight group name
 function M.get_highlight_for_type(node_type)
-  -- AI HINTS: Keep capture names generic ("class", "function", ...) so highlight groups are
-  -- AI HINTS: consistent across languages.
   local map = {
     ["class"] = "XmapClass",
     ["function"] = "XmapFunction",
@@ -259,10 +207,6 @@ function M.get_highlight_for_type(node_type)
 
   return map[node_type] or "XmapText"
 end
-
--- AI HINTS: Check if Tree-sitter parser is available for filetype
--- INPUT: filetype string: Filetype to check
--- OUTPUT: boolean: True if parser is available
 function M.has_parser(filetype)
   if not M.available then
     return false

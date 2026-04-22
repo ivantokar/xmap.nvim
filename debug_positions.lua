@@ -1,5 +1,6 @@
--- AI HINTS: Debug minimap line highlighting positions
--- AI HINTS: Run with: :luafile debug_positions.lua
+
+-- PURPOSE:
+-- - Inspect rendered minimap text and extmarks when highlight spans look wrong.
 
 print("=== Debugging Minimap Line Positions ===\n")
 
@@ -17,8 +18,6 @@ print("First 10 minimap lines:\n")
 for i, line in ipairs(lines) do
   print(string.format("Line %d: '%s'", i, line))
   print(string.format("  Length: %d", #line))
-
-  -- AI HINTS: Try to find keywords
   local text_after_icon = line:sub(8)
   print(string.format("  After pos 8: '%s'", text_after_icon))
 

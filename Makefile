@@ -1,46 +1,37 @@
 .PHONY: test test-swift test-lua test-ts test-tsx test-c test-cpp test-follow dev clean install-local
 
-# AI HINTS: Test with minimal config (default: Swift)
+# PURPOSE:
+# - Manual smoke and local dev targets.
 test:
 	nvim -u test_config.lua test.swift
 
-# AI HINTS: Test with Swift file
 test-swift:
 	nvim -u test_config.lua test.swift
 
-# AI HINTS: Test with Lua file
 test-lua:
 	nvim -u test_config.lua test.lua
 
-# AI HINTS: Test with TypeScript file
 test-ts:
 	nvim -u test_config.lua test.ts
 
-# AI HINTS: Test with TSX file
 test-tsx:
 	nvim -u test_config.lua test.tsx
 
-# AI HINTS: Test with C file
 test-c:
 	nvim -u test_config.lua test.c
 
-# AI HINTS: Test with C++ file
 test-cpp:
 	nvim -u test_config.lua test.cpp
 
-# AI HINTS: Headless QA regression checks
 test-follow:
 	nvim --headless -n -i NONE -u test_config.lua -c "lua dofile('scripts/qa_follow_active_buffer.lua')"
 
-# AI HINTS: Open for development (uses your actual config)
 dev:
 	nvim -c "set rtp+=." test.swift
 
-# AI HINTS: Clean generated files
 clean:
 	rm -f profile.log
 
-# AI HINTS: Create symlink for local development with lazy.nvim
 install-local:
 	@echo "Add this to your lazy.nvim config:"
 	@echo ""
@@ -52,7 +43,6 @@ install-local:
 	@echo "  end,"
 	@echo "}"
 
-# AI HINTS: Help
 help:
 	@echo "xmap.nvim development commands:"
 	@echo ""

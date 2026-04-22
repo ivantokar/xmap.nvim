@@ -1,14 +1,8 @@
--- AI HINTS: lua/xmap/lang/cpp.lua
--- AI HINTS: Copyright (c) Ivan Tokar. MIT License.
--- PURPOSE: Provide C++ symbol/comment extraction for xmap minimap.
--- DEPENDENCIES: Neovim Lua API (`vim.*`) and xmap language loader.
--- CONSTRAINTS: Keep provider pure; no buffer/window mutation.
--- STABILITY: Core
+
+-- PURPOSE:
+-- - Parse C++ declarations/comments for minimap rendering.
 
 local M = {}
-
--- PURPOSE: Default symbol classes used when user config does not override `symbols.cpp.keywords`.
--- OUTPUT: Ordered keyword list consumed by symbol filtering/highlighting.
 M.default_symbol_keywords = {
 	"function",
 	"method",
@@ -35,12 +29,9 @@ local CONTROL_KEYWORDS = {
 	["new"] = true,
 	["delete"] = true,
 }
-
--- PURPOSE: Query fallbacks ordered from richest -> most compatible.
--- DO: Keep first variant as preferred parse surface.
--- DO NOT: Remove fallback variant without parser-compat evidence.
--- STABILITY: Flexible
 local QUERY_VARIANTS = {
+	-- CONSTRAINTS:
+	-- - Keep a compatibility fallback for parser/version drift.
 	[[
     (function_definition) @function
     (class_specifier) @class
@@ -69,15 +60,9 @@ end
 local function ltrim(text)
 	return (text:gsub("^%s+", ""))
 end
-
--- PURPOSE: Normalize declaration prefixes before pattern-based symbol parsing.
--- INPUT: Raw source line text.
--- OUTPUT: Same line without known leading declaration modifiers.
--- ALGORITHM:
--- AI HINTS: - Trim leading whitespace.
--- AI HINTS: - Iteratively strip known modifiers until no change.
--- CONSTRAINTS: Strip only leading tokens; preserve semantic tail.
 local function strip_modifiers(text)
+	-- PURPOSE:
+	-- - Remove leading declaration modifiers before pattern matching.
 	local out = ltrim(text)
 	local patterns = {
 		"^(static)%s+",
@@ -107,21 +92,12 @@ local function strip_modifiers(text)
 end
 
 function M.parse_symbol(line_text)
-	-- PURPOSE: Map one C++ line to a minimap symbol descriptor or nil.
-	-- INPUT: `line_text` (string|nil), may include modifiers/comments/spacing noise.
-	-- OUTPUT: Table `{ keyword, capture_type, display }` or nil.
-	-- DO:
-	-- AI HINTS: - Prefer explicit constructs (`#define`, `namespace`, `class`, aliases, methods).
-	-- AI HINTS: - Avoid control keywords as function names.
-	-- CONSTRAINTS: Pattern-only parser; no Tree-sitter dependency here.
-	-- AI HINTS: Extend by adding guarded parsing blocks; keep scoped-method detection before generic function patterns.
 	local cleaned = strip_modifiers(line_text or "")
 	if cleaned == "" then
 		return nil
 	end
 
 	do
-		-- PURPOSE: Render preprocessor define as navigable symbol.
 		local macro = cleaned:match("^#%s*define%s+([%w_]+)")
 		if macro then
 			return { keyword = "define", capture_type = "variable", display = "#define " .. macro }
@@ -129,7 +105,6 @@ function M.parse_symbol(line_text)
 	end
 
 	if cleaned == "return" or cleaned:match("^return%f[%W]") then
-		-- PURPOSE: Surface control-flow return markers with optional tail expression.
 		local rest = vim.trim((cleaned:gsub("^return", "", 1))):gsub(";+$", "")
 		local display = "return"
 		if rest ~= "" then
@@ -139,7 +114,6 @@ function M.parse_symbol(line_text)
 	end
 
 	do
-		-- PURPOSE: Detect namespace declarations.
 		local name = cleaned:match("^namespace%s+([%w_]+)")
 		if name then
 			return { keyword = "namespace", capture_type = "class", display = "namespace " .. name }
@@ -147,7 +121,6 @@ function M.parse_symbol(line_text)
 	end
 
 	do
-		-- PURPOSE: Detect named type declarations.
 		local keyword, name = cleaned:match("^(class)%s+([%w_]+)")
 			or cleaned:match("^(struct)%s+([%w_]+)")
 			or cleaned:match("^(union)%s+([%w_]+)")
@@ -158,7 +131,6 @@ function M.parse_symbol(line_text)
 	end
 
 	do
-		-- PURPOSE: Detect `using` aliases.
 		local alias = cleaned:match("^using%s+([%w_]+)%s*=")
 		if alias then
 			return { keyword = "using", capture_type = "class", display = "using " .. alias }
@@ -166,7 +138,6 @@ function M.parse_symbol(line_text)
 	end
 
 	do
-		-- PURPOSE: Detect `typedef` aliases.
 		local alias = cleaned:match("^typedef%s+.-([%w_]+)%s*;")
 		if alias then
 			return { keyword = "typedef", capture_type = "class", display = "typedef " .. alias }
@@ -174,7 +145,6 @@ function M.parse_symbol(line_text)
 	end
 
 	do
-		-- PURPOSE: Detect scoped methods and classify separately from free functions.
 		local scoped = cleaned:match("([%w_~]+::[%w_~]+)%s*%b()%s*[{;]")
 		if scoped then
 			return { keyword = "method", capture_type = "method", display = "method " .. scoped }
@@ -182,7 +152,6 @@ function M.parse_symbol(line_text)
 	end
 
 	do
-		-- PURPOSE: Detect unqualified function-like signatures.
 		local name = cleaned:match("^([%a_~][%w_~]*)%s*%b()%s*[{;]")
 		if name and not CONTROL_KEYWORDS[name] then
 			return { keyword = "function", capture_type = "function", display = "function " .. name }
@@ -190,7 +159,6 @@ function M.parse_symbol(line_text)
 	end
 
 	do
-		-- PURPOSE: Detect typed function signatures (incl. templates/pointers/references).
 		local name = cleaned:match("^[%w_%s%*&:<>,~]+%s+([%a_~][%w_~]*)%s*%b()%s*[{;]")
 		if name and not CONTROL_KEYWORDS[name] then
 			return { keyword = "function", capture_type = "function", display = "function " .. name }
@@ -201,9 +169,6 @@ function M.parse_symbol(line_text)
 end
 
 function M.is_comment_line(trimmed)
-	-- PURPOSE: Fast gate for comment-line rendering path.
-	-- INPUT: Trimmed line.
-	-- OUTPUT: Boolean.
 	return trimmed:match("^//")
 		or trimmed:match("^/%*")
 		or trimmed:match("^%*/")
@@ -212,10 +177,8 @@ function M.is_comment_line(trimmed)
 end
 
 function M.extract_comment(line)
-	-- PURPOSE: Normalize comment text and marker metadata for minimap rendering.
-	-- INPUT: Raw line.
-	-- OUTPUT: `text, marker, false, raw_text` or nil tuple.
-	-- CONSTRAINTS: Keep output shape compatible with existing provider interface.
+	-- PURPOSE:
+	-- - Normalize C++ comment text and marker prefixes for rendering.
 	local trimmed = vim.trim(line)
 	local text = trimmed:gsub("^//+%s*", ""):gsub("^/%*+%s*", ""):gsub("^%*+%s*", ""):gsub("%s*%*/$", "")
 	if text == "" then
@@ -223,7 +186,6 @@ function M.extract_comment(line)
 	end
 
 	local marker = nil
-	-- DO: Parse marker prefixes used by current highlight contract.
 	if text:match("^TODO:") then
 		marker = "TODO"
 		text = text:gsub("^TODO:%s*", "")
@@ -245,7 +207,6 @@ function M.extract_comment(line)
 	end
 
 	local raw_text = text
-	-- CONSTRAINTS: Keep minimap rows compact; preserve non-truncated `raw_text`.
 	if #text > 35 then
 		text = text:sub(1, 32) .. "..."
 	end
@@ -254,8 +215,8 @@ function M.extract_comment(line)
 end
 
 function M.render_comment(line)
-	-- PURPOSE: Convert extracted comment tuple into renderer-ready payload.
-	-- OUTPUT: `{ kind=\"marker\"|\"comment\", ... }` or nil.
+	-- PURPOSE:
+	-- - Render either a marker or a plain comment entry.
 	local text, marker = M.extract_comment(line)
 	if marker then
 		return { kind = "marker", marker = marker, text = text or "" }

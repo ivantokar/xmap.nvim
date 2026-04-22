@@ -1,5 +1,6 @@
--- AI HINTS: scripts/qa_follow_active_buffer.lua
--- AI HINTS: Headless regression check: minimap should follow the active buffer/window.
+
+-- PURPOSE:
+-- - Guard the follow-current-buffer workflow against regressions.
 
 local function assert_eq(actual, expected, message)
   if actual ~= expected then

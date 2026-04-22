@@ -1,5 +1,6 @@
--- AI HINTS: scripts/qa_smoke_languages.lua
--- AI HINTS: Headless smoke check: ensure xmap opens/closes across bundled filetypes.
+
+-- PURPOSE:
+-- - Verify that bundled providers open and close the minimap cleanly.
 
 local function assert_true(value, message)
   if not value then
@@ -15,10 +16,8 @@ local cases = {
 	{ path = "test.swift", filetype = "swift" },
 	{ path = "test.ts", filetype = "typescript" },
 	{ path = "test.tsx", filetype = "typescriptreact" },
-	-- AI HINTS: C/C++ provider smoke tests.
 	{ path = "test.c", filetype = "c" },
 	{ path = "test.cpp", filetype = "cpp" },
-	-- AI HINTS: Header aliases: `h` -> C provider, `hpp` -> C++ provider.
 	{ path = "test.c", filetype = "h" },
 	{ path = "test.cpp", filetype = "hpp" },
 }
