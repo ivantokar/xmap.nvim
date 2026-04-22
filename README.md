@@ -9,6 +9,10 @@
 
 An **Xcode-style minimap** for Neovim with full **keyboard navigation** and **Tree-sitter integration**. Navigate your code with a visual overview that respects your colorscheme.
 
+<p align="center">
+<img src="./xmap-demo.gif" alt="xmap.nvim demo" width="100%">
+</p>
+
 ## Features
 
 - **Visual Minimap**: Side-by-side overview of your entire buffer
