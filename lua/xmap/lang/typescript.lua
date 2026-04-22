@@ -1,10 +1,7 @@
--- AI HINTS: lua/xmap/lang/typescript.lua
--- AI HINTS: Copyright (c) Ivan Tokar. MIT License.
--- AI HINTS: TypeScript language support for xmap.nvim
---
--- AI HINTS: This provider implements a lightweight, line-based parser for common TypeScript
--- AI HINTS: declarations (functions/classes/types/etc.) and a Tree-sitter query for structural
--- AI HINTS: scope highlighting.
+-- PURPOSE:
+-- - Parse TypeScript/TSX declarations and comment forms for minimap rendering.
+-- CONSTRAINTS:
+-- - Treat JSX block comments as comment lines.
 
 local M = {}
 
@@ -57,10 +54,8 @@ local RESERVED = {
 }
 
 local function strip_ts_modifiers(text)
-  -- AI HINTS: Strip common modifiers so we can match declarations consistently.
-  -- AI HINTS: Examples:
-  -- AI HINTS: export default class Foo
-  -- AI HINTS: public async render(): JSX.Element {
+  -- PURPOSE:
+  -- - Remove declaration modifiers before pattern matching.
   local out = ltrim(text)
 
   local function strip(pattern)
@@ -95,17 +90,14 @@ local function strip_ts_modifiers(text)
 end
 
 local function looks_like_arrow_function(rhs)
+  -- PURPOSE:
+  -- - Distinguish function-valued assignments from plain variables.
   local text = ltrim(rhs or "")
   text = text:gsub("^async%s+", "")
 
   if text:match("^function") then
     return true
   end
-
-  -- AI HINTS: Arrow functions:
-  -- AI HINTS: (a, b) => ...
-  -- AI HINTS: a => ...
-  -- AI HINTS: <T>(a: T) => ...
   if text:match("^%b()%s*=>") then
     return true
   end
@@ -123,7 +115,8 @@ local function looks_like_arrow_function(rhs)
 end
 
 local QUERY_VARIANTS = {
-  -- AI HINTS: TypeScript / TSX
+  -- CONSTRAINTS:
+  -- - Keep a minimal fallback for parser/query compatibility.
   [[
     (class_declaration) @class
     (interface_declaration) @class
@@ -133,41 +126,25 @@ local QUERY_VARIANTS = {
     (function_declaration) @function
     (method_definition) @method
   ]],
-
-  -- AI HINTS: Minimal fallback
   [[
     (class_declaration) @class
     (function_declaration) @function
   ]],
 }
-
--- AI HINTS: -Get Tree-sitter query candidates for TypeScript (newest-first).
--- AI HINTS: -@return string[]
 function M.get_queries()
   return QUERY_VARIANTS
 end
-
--- AI HINTS: -Get the primary Tree-sitter query string for TypeScript.
--- AI HINTS: -@return string
 function M.get_query()
   return QUERY_VARIANTS[1]
 end
-
--- AI HINTS: -Parse a TypeScript declaration line into a symbol item.
--- AI HINTS: -@param line_text string
--- AI HINTS: -@return {keyword:string, capture_type:string, display:string}|nil
 function M.parse_symbol(line_text)
   local cleaned = strip_ts_modifiers(line_text or "")
   if cleaned == "" then
     return nil
   end
-
-  -- AI HINTS: Ignore decorator lines (Angular/TS ecosystems)
   if cleaned:match("^@") then
     return nil
   end
-
-  -- AI HINTS: return statements
   if cleaned == "return" or cleaned:match("^return%f[%W]") then
     local rest = vim.trim((cleaned:gsub("^return", "", 1)))
     rest = vim.trim((rest:gsub(";+%s*$", "")))
@@ -177,8 +154,6 @@ function M.parse_symbol(line_text)
     end
     return { keyword = "return", capture_type = "function", display = display }
   end
-
-  -- AI HINTS: class / interface / type / enum / namespace / module
   do
     local name = cleaned:match("^class%s+([%w_$]+)")
     if name then
@@ -213,16 +188,12 @@ function M.parse_symbol(line_text)
       return { keyword = keyword, capture_type = "class", display = keyword .. " " .. name }
     end
   end
-
-  -- AI HINTS: function declarations
   do
     local name = cleaned:match("^function%s*%*?%s+([%w_$]+)")
     if name then
       return { keyword = "function", capture_type = "function", display = "function " .. name }
     end
   end
-
-  -- AI HINTS: const/let/var declarations (treat arrow/function assignments as "function")
   do
     local kw, name = cleaned:match("^(%a+)%s+([%w_$]+)")
     if (kw == "const" or kw == "let" or kw == "var") and name then
@@ -237,11 +208,9 @@ function M.parse_symbol(line_text)
       return { keyword = kw, capture_type = "variable", display = kw .. " " .. name }
     end
   end
-
-  -- AI HINTS: Member methods: `foo() {` / `foo(): T {` / `get foo() {`
   do
     local member = strip_ts_modifiers(cleaned)
-    member = member:gsub("^%*%s*", "") -- AI HINTS: generator marker
+    member = member:gsub("^%*%s*", "")
 
     local accessor, acc_name = member:match("^(get)%s+([%w_$]+)%s*<[^>]*>%s*%b()%s*[:{]")
     if not accessor then
@@ -269,8 +238,6 @@ function M.parse_symbol(line_text)
       return { keyword = "method", capture_type = "method", display = "method " .. meth_name }
     end
   end
-
-  -- AI HINTS: Member arrow/function properties: `foo = (...) =>` / `foo: T = (...) =>`
   do
     local member = strip_ts_modifiers(cleaned)
     local name, rhs = member:match("^([%w_$]+)%s*=%s*(.+)$")
@@ -281,8 +248,6 @@ function M.parse_symbol(line_text)
       return { keyword = "method", capture_type = "method", display = "method " .. name }
     end
   end
-
-  -- AI HINTS: Property signatures (interfaces/types/classes): `foo?: T` / `foo!: T`
   do
     local member = strip_ts_modifiers(cleaned)
     local name = member:match("^([%w_$]+)%s*[%?!%!]*%s*:%s+")
@@ -293,16 +258,9 @@ function M.parse_symbol(line_text)
 
   return nil
 end
-
--- AI HINTS: -Check if a line is a comment line in TypeScript.
--- AI HINTS: -@param trimmed string
--- AI HINTS: -@return boolean
 function M.is_comment_line(trimmed)
-  -- AI HINTS: TS/TSX supports `//` line comments and `/* ... */` block comments.
-  -- AI HINTS: In TSX (typescriptreact), JSX comments look like: `{/* comment */}`.
-  --
-  -- AI HINTS: Note: avoid treating generator methods (`*foo() {}`) as comments by requiring
-  -- AI HINTS: whitespace after `*` for block-comment continuation lines.
+  -- PURPOSE:
+  -- - Detect TS, block, continuation, and JSX comment lines.
   return trimmed:match("^//")
     or trimmed:match("^/%*")
     or trimmed:match("^%*/")
@@ -310,11 +268,6 @@ function M.is_comment_line(trimmed)
     or trimmed == "*"
     or trimmed:match("^%{%s*/%*")
 end
-
--- AI HINTS: -Detect file header comments to reduce noise.
--- AI HINTS: -@param lines string[]
--- AI HINTS: -@param line_nr integer 1-indexed
--- AI HINTS: -@return boolean
 function M.is_file_header(lines, line_nr)
   if line_nr > 50 then
     return false
@@ -357,7 +310,6 @@ local function is_jsx_block_comment_line(trimmed)
 end
 
 local function find_enclosing_block_comment_start(all_lines, line_nr)
-  -- AI HINTS: Walk backwards and find the nearest `/*` start without crossing a `*/` end.
   for i = line_nr - 1, math.max(1, line_nr - 200), -1 do
     local trimmed = vim.trim(all_lines[i] or "")
     if is_block_comment_end(trimmed) then
@@ -371,13 +323,10 @@ local function find_enclosing_block_comment_start(all_lines, line_nr)
 end
 
 local function find_first_block_comment_entry(all_lines, start_line_nr)
-  -- AI HINTS: Return the first meaningful comment entry within a /* ... */ block:
-  -- AI HINTS: - first non-@tag text line (preferred)
-  -- AI HINTS: - otherwise the first MARK/TODO/etc marker line
-  -- AI HINTS: The returned `line_nr` is where the entry should be rendered.
+  -- ALGORITHM:
+  -- - Prefer the first non-tag text line inside the block.
+  -- - Fall back to the first marker line when the block is marker-only.
   local marker_line_nr, marker_name, marker_text = nil, nil, nil
-
-  -- AI HINTS: Opening line can carry text: `/** Summary` or `/* Summary */`
   do
     local text, marker = M.extract_comment(all_lines[start_line_nr] or "")
     if marker then
@@ -409,21 +358,13 @@ local function find_first_block_comment_entry(all_lines, start_line_nr)
 
   return nil
 end
-
--- AI HINTS: -Extract comment text (remove markers, get first line only).
--- AI HINTS: -@param line string
--- AI HINTS: -@return string|nil, string|nil, boolean, string|nil
 function M.extract_comment(line)
   local trimmed = vim.trim(line)
 
   local is_doc_comment = trimmed:match("^///") or trimmed:match("^/%*%*") or trimmed:match("^%{%s*/%*%*")
-
-  -- AI HINTS: Skip pure opening/closing markers for block/JSX comments.
   if trimmed == "/*" or trimmed == "/**" or trimmed == "*/" or trimmed:match("^%*/%s*%}$") then
     return nil, nil, is_doc_comment
   end
-
-  -- AI HINTS: JSX comment: `{/* ... */}` (TSX)
   do
     local jsx_inner = trimmed:match("^%{%s*/%*(.-)%*/%s*%}$")
     if jsx_inner ~= nil then
@@ -504,15 +445,10 @@ function M.extract_comment(line)
 
   return text, marker, is_doc_comment, raw_text
 end
-
--- AI HINTS: -Render a comment entry for the minimap (no comment prefix).
--- AI HINTS: -@param line string
--- AI HINTS: -@param line_nr integer 1-indexed
--- AI HINTS: -@param all_lines string[]
--- AI HINTS: -@return {kind:"marker"|"comment", marker:string|nil, text:string}|nil
 function M.render_comment(line, line_nr, all_lines)
+  -- PURPOSE:
+  -- - Collapse block comments to one rendered entry and skip closing lines.
   local trimmed = vim.trim(line)
-  -- AI HINTS: TSX JSX comment: `{/* ... */}`.
   if is_jsx_block_comment_line(trimmed) then
     local text, marker = M.extract_comment(line)
     if marker then
@@ -523,13 +459,9 @@ function M.render_comment(line, line_nr, all_lines)
     end
     return nil
   end
-
-  -- AI HINTS: Never render the closing line of a block comment.
   if is_block_comment_end(trimmed) then
     return nil
   end
-
-  -- AI HINTS: Block comment opening line: render only if it contains meaningful text.
   if is_block_comment_start(trimmed) then
     local text, marker = M.extract_comment(line)
     if marker then
@@ -540,8 +472,6 @@ function M.render_comment(line, line_nr, all_lines)
     end
     return nil
   end
-
-  -- AI HINTS: Block comment continuation (`* ...`): render only the first meaningful text line.
   if trimmed:match("^%*") then
     local start_line_nr = find_enclosing_block_comment_start(all_lines, line_nr)
     if not start_line_nr then

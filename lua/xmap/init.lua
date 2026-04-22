@@ -1,45 +1,22 @@
--- AI HINTS: lua/xmap/init.lua
--- AI HINTS: Copyright (c) Ivan Tokar. MIT License.
--- PURPOSE: Public API entrypoint for xmap plugin lifecycle and commands.
--- INPUT: User config via `setup(opts)` and command-driven calls (`open`, `toggle`, `focus`).
--- OUTPUT: Stable API surface wrapping internal modules.
--- DEPENDENCIES: config, highlight, treesitter, minimap, navigation modules.
--- CONSTRAINTS: Keep API backward-compatible for user init.lua and exposed commands.
--- STABILITY: Core
+
+-- PURPOSE:
+-- - Expose the public xmap API and wire core modules on setup.
+-- CONSTRAINTS:
+-- - Keep lazy-init behavior for direct API calls before `setup()`.
 
 local M = {}
-
--- AI HINTS: Module references
 local config = require("xmap.config")
 local highlight = require("xmap.highlight")
 local treesitter = require("xmap.treesitter")
 local minimap = require("xmap.minimap")
 local navigation = require("xmap.navigation")
-
--- AI HINTS: Plugin state
 M._initialized = false
-
--- AI HINTS: Setup function
--- INPUT: opts table: User configuration options
 function M.setup(opts)
-  -- AI HINTS: Idempotent: safe to call multiple times, but users typically call once from init.lua.
-  -- AI HINTS: Merge user config with defaults
   config.setup(opts or {})
-
-  -- AI HINTS: Initialize highlight groups
   highlight.setup()
-
-  -- AI HINTS: Initialize Tree-sitter if available
   treesitter.setup()
-
-  -- AI HINTS: Set up global keymaps if configured
   M.setup_global_keymaps()
-
-  -- AI HINTS: Set up autocommands for auto-open
   M.setup_auto_open()
-
-  -- AI HINTS: Refresh highlights on colorscheme change
-  -- AI HINTS: (re-apply links/fallbacks and user overrides).
   vim.api.nvim_create_autocmd("ColorScheme", {
     pattern = "*",
     callback = function()
@@ -49,43 +26,30 @@ function M.setup(opts)
 
   M._initialized = true
 end
-
--- AI HINTS: Set up global keymaps
 function M.setup_global_keymaps()
   local opts = config.get()
-
-  -- AI HINTS: Toggle keymap
   if opts.keymaps.toggle then
     vim.keymap.set("n", opts.keymaps.toggle, function()
       M.toggle()
     end, { silent = true, desc = "Toggle Xmap minimap" })
   end
-
-  -- AI HINTS: Focus keymap
   if opts.keymaps.focus then
     vim.keymap.set("n", opts.keymaps.focus, function()
       M.focus()
     end, { silent = true, desc = "Focus Xmap minimap" })
   end
 end
-
--- AI HINTS: Set up auto-open functionality
 function M.setup_auto_open()
   local opts = config.get()
 
   if not opts.auto_open then
     return
   end
-
-  -- AI HINTS: Auto-open minimap for supported filetypes
   vim.api.nvim_create_autocmd({ "BufEnter", "FileType" }, {
     pattern = "*",
     callback = function()
       local filetype = vim.bo.filetype
-
-      -- AI HINTS: Check if filetype is supported
       if config.is_filetype_supported(filetype) then
-        -- AI HINTS: Only open if not already open
         if not minimap.is_open() then
           M.open()
         end
@@ -93,85 +57,57 @@ function M.setup_auto_open()
     end,
   })
 end
-
--- AI HINTS: Open minimap
 function M.open()
-  -- AI HINTS: Lazy-initialize if user calls API before `setup()`.
   if not M._initialized then
     M.setup()
   end
 
   minimap.open()
 end
-
--- AI HINTS: Close minimap
 function M.close()
   minimap.close()
 end
-
--- AI HINTS: Toggle minimap
 function M.toggle()
-  -- AI HINTS: Lazy-initialize if user calls API before `setup()`.
   if not M._initialized then
     M.setup()
   end
 
   minimap.toggle()
 end
-
--- AI HINTS: Refresh minimap (force redraw)
 function M.refresh()
   if minimap.is_open() then
     minimap.update()
   end
 end
-
--- AI HINTS: Focus minimap window
 function M.focus()
-  -- AI HINTS: Lazy-initialize if user calls API before `setup()`.
   if not M._initialized then
     M.setup()
   end
-
-  -- AI HINTS: Focus should be a convenience: open the minimap if needed, then focus it.
   if not (minimap.is_open() and minimap.state.winid and vim.api.nvim_win_is_valid(minimap.state.winid)) then
     M.open()
   end
-
-  -- AI HINTS: Opening can fail (e.g. unsupported filetype), so check again.
   if not (minimap.is_open() and minimap.state.winid and vim.api.nvim_win_is_valid(minimap.state.winid)) then
     return
   end
 
   navigation.focus_minimap(minimap.state.winid)
 end
-
--- AI HINTS: Check if minimap is open
--- OUTPUT: boolean
 function M.is_open()
   return minimap.is_open()
 end
-
--- AI HINTS: Get current configuration
--- OUTPUT: table: Current configuration
 function M.get_config()
   return config.get()
 end
-
--- AI HINTS: Update configuration at runtime
--- INPUT: opts table: Configuration options to update
 function M.update_config(opts)
   local current = config.get()
   config.options = vim.tbl_deep_extend("force", current, opts or {})
-
-  -- AI HINTS: Refresh if minimap is open
   if minimap.is_open() then
     M.refresh()
   end
 end
-
--- AI HINTS: Diagnostic function to test Tree-sitter detection
 function M.diagnose()
+  -- PURPOSE:
+  -- - Print enough parser/query state to debug Tree-sitter mismatches.
   local bufnr = vim.api.nvim_get_current_buf()
   local filetype = vim.api.nvim_buf_get_option(bufnr, "filetype")
   local ts_lang = filetype
@@ -182,12 +118,8 @@ function M.diagnose()
   print("=== xmap.nvim Diagnostics ===")
   print("Filetype: " .. filetype)
   print("Tree-sitter language: " .. ts_lang)
-  
-  -- AI HINTS: Check if nvim-treesitter is available
   local ts_ok, _ = pcall(require, "nvim-treesitter")
   print("nvim-treesitter available: " .. tostring(ts_ok))
-  
-  -- AI HINTS: Check if parser is available
   local parser = vim.treesitter.get_parser(bufnr, nil, { error = false })
   print("Tree-sitter parser for " .. filetype .. ": " .. tostring(parser ~= nil))
   
@@ -196,8 +128,6 @@ function M.diagnose()
     print("Install with: :TSInstall " .. ts_lang)
     return
   end
-  
-  -- AI HINTS: Try to parse
   local ok, trees = pcall(function() return parser:parse() end)
   print("Parse successful: " .. tostring(ok))
   
@@ -205,8 +135,6 @@ function M.diagnose()
     print("ERROR: Failed to parse buffer")
     return
   end
-  
-  -- AI HINTS: Check structural nodes
   local treesitter = require("xmap.treesitter")
   local nodes = treesitter.get_structural_nodes(bufnr, filetype)
   print("Structural nodes found: " .. #nodes)
@@ -223,22 +151,17 @@ function M.diagnose()
     print("  1. The Tree-sitter query doesn't match any nodes")
     print("  2. The parser node names are different")
     print("  3. The buffer is empty or has no structural elements")
-
-    -- AI HINTS: Recursively search for all declaration nodes
     print("\nSearching entire tree for function/property declarations:")
     local function find_declarations(node, depth)
-      if depth > 10 then return end -- AI HINTS: Prevent infinite recursion
+      if depth > 10 then return end
 
       local node_type = node:type()
-      -- AI HINTS: Look for anything that might be a function or property
       if node_type:match("function") or node_type:match("property") or
          node_type:match("method") or node_type:match("init") or
          node_type:match("variable") or node_type:match("constant") then
         local start_row = node:start()
         print(string.format("  Line %d: %s", start_row + 1, node_type))
       end
-
-      -- AI HINTS: Recursively check children
       for i = 0, node:child_count() - 1 do
         local child = node:child(i)
         if child then
@@ -248,11 +171,7 @@ function M.diagnose()
     end
 
     find_declarations(trees[1]:root(), 0)
-
-    -- AI HINTS: Try to inspect the tree
     print("\nTree root type: " .. trees[1]:root():type())
-    
-    -- AI HINTS: Try to get first few children
     local root = trees[1]:root()
     print("Root has " .. root:child_count() .. " children")
     if root:child_count() > 0 then
@@ -262,8 +181,6 @@ function M.diagnose()
         if child then
           local start_row = child:start()
           print(string.format("  Line %d: %s (has %d children)", start_row + 1, child:type(), child:child_count()))
-
-          -- AI HINTS: If this is a class/struct, show its children
           if child:type():match("declaration") and child:child_count() > 0 then
             print("    Children of " .. child:type() .. ":")
             for j = 0, math.min(9, child:child_count() - 1) do
@@ -281,8 +198,6 @@ function M.diagnose()
   
   print("=== End Diagnostics ===")
 end
-
--- PURPOSE: Semantic plugin version exposed for diagnostics/tooling.
 M.version = "0.8.2"
 
 return M

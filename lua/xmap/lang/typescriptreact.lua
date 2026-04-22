@@ -1,16 +1,11 @@
--- AI HINTS: lua/xmap/lang/typescriptreact.lua
--- AI HINTS: Copyright (c) Ivan Tokar. MIT License.
--- AI HINTS: TypeScript React (TSX) language support for xmap.nvim
---
--- AI HINTS: Neovim uses `typescriptreact` as the filetype for `.tsx` files. Most of the parsing
--- AI HINTS: rules are shared with TypeScript, but TSX benefits from React-specific heuristics
--- AI HINTS: (hook calls + common component wrappers) for a more useful minimap outline.
+-- PURPOSE:
+-- - Extend the TypeScript provider with React hook/component heuristics.
+-- CONSTRAINTS:
+-- - Defer to the base TypeScript provider when React-specific patterns do not match.
 
 local ts = require("xmap.lang.typescript")
 
 local M = {}
-
--- AI HINTS: Copy base TypeScript provider surface.
 for k, v in pairs(ts) do
   M[k] = v
 end
@@ -35,7 +30,6 @@ local function ltrim(text)
 end
 
 local function strip_ts_modifiers(text)
-  -- AI HINTS: Keep consistent with the TypeScript provider: strip leading modifiers for easier matching.
   local out = ltrim(text or "")
 
   local function strip(pattern)
@@ -77,14 +71,10 @@ local function parse_hook_call(text)
   local t = ltrim(text or "")
 
   local hook_name, args
-
-  -- AI HINTS: Generic call: useState<T>(...)
   hook_name, _, args = t:match("^React%.(use%u[%w_$]*)%s*(%b<>)%s*%((.*)$")
   if not hook_name then
     hook_name, _, args = t:match("^(use%u[%w_$]*)%s*(%b<>)%s*%((.*)$")
   end
-
-  -- AI HINTS: Non-generic call: useEffect(...)
   if not hook_name then
     hook_name, args = t:match("^React%.(use%u[%w_$]*)%s*%((.*)$")
   end
@@ -130,11 +120,6 @@ local function looks_like_arrow_function(rhs)
   if text:match("^function") then
     return true
   end
-
-  -- AI HINTS: Arrow functions:
-  -- AI HINTS: (a, b) => ...
-  -- AI HINTS: a => ...
-  -- AI HINTS: <T>(a: T) => ...
   if text:match("^%b()%s*=>") then
     return true
   end
@@ -177,18 +162,14 @@ local function is_wrapped_react_component(rhs)
 end
 
 local function parse_react_hook_symbol(cleaned)
-  -- AI HINTS: Direct hook call: `useEffect(...)` / `React.useEffect(...)`
+  -- PURPOSE:
+  -- - Surface hook calls and hook assignments as dedicated minimap entries.
   do
     local hook_name, first_arg = parse_hook_call(cleaned)
     if hook_name then
       return hook_symbol(hook_name, first_arg)
     end
   end
-
-  -- AI HINTS: Hook call assigned to a const/let/var:
-  -- AI HINTS: const value = useMemo(...)
-  -- AI HINTS: const [value, setValue] = useState(...)
-  -- AI HINTS: const { value } = useContext(...)
   do
     local kw, lhs, rhs = cleaned:match("^(%a+)%s*(%b[])%s*=%s*(.+)$")
     if (kw == "const" or kw == "let" or kw == "var") and lhs and rhs then
@@ -223,36 +204,24 @@ local function parse_react_hook_symbol(cleaned)
 
   return nil
 end
-
--- AI HINTS: -Parse TSX/React symbols + hook calls.
--- AI HINTS: -@param line_text string
--- AI HINTS: -@return {keyword:string, capture_type:string, display:string}|nil
 function M.parse_symbol(line_text)
   local cleaned = strip_ts_modifiers(line_text or "")
   if cleaned == "" then
     return nil
   end
-
-  -- AI HINTS: Ignore decorator lines (Angular/TS ecosystems).
   if cleaned:match("^@") then
     return nil
   end
-
-  -- AI HINTS: React hooks: show `hook useX` entries (useful inside components).
   local hook = parse_react_hook_symbol(cleaned)
   if hook then
     return hook
   end
-
-  -- AI HINTS: React component wrappers: `const Foo = memo((...) => ...)` should show as a function entry.
   do
     local kw, name, rhs = cleaned:match("^(%a+)%s+([%w_$]+)%s*.-=%s*(.+)$")
     if (kw == "const" or kw == "let" or kw == "var") and name and rhs and is_pascal_case(name) and is_wrapped_react_component(rhs) then
       return function_symbol(name)
     end
   end
-
-  -- AI HINTS: Default TypeScript parsing.
   local symbol = ts.parse_symbol(line_text)
   if not symbol then
     return nil
@@ -260,9 +229,6 @@ function M.parse_symbol(line_text)
 
   return symbol
 end
-
--- AI HINTS: TSX tends to use const-assigned arrow functions for components. Improve Tree-sitter highlighting
--- AI HINTS: by capturing those declarations as @function when possible (fallbacks included).
 local QUERY_VARIANTS = {
   [[
     (class_declaration) @class
@@ -281,6 +247,8 @@ local QUERY_VARIANTS = {
 }
 
 function M.get_queries()
+  -- DO:
+  -- - Prepend TSX-specific captures before the base TypeScript fallbacks.
   local base = {}
   if type(ts.get_queries) == "function" then
     local ok, queries = pcall(ts.get_queries)

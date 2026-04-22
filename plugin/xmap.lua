@@ -1,19 +1,10 @@
--- AI HINTS: plugin/xmap.lua
--- AI HINTS: Copyright (c) Ivan Tokar. MIT License.
--- AI HINTS: Plugin loader for xmap.nvim
---
--- AI HINTS: Neovim loads files in `plugin/` automatically on startup.
--- AI HINTS: This file is responsible only for defining user-facing commands.
--- AI HINTS: The actual implementation lives in `lua/xmap/`.
+-- PURPOSE:
+-- - Register user commands once per Neovim session.
 
--- AI HINTS: Prevent loading twice
 if vim.g.loaded_xmap then
   return
 end
 vim.g.loaded_xmap = true
-
--- AI HINTS: Define user commands
--- AI HINTS: Commands call into the public API (`lua/xmap/init.lua`).
 vim.api.nvim_create_user_command("XmapToggle", function()
   require("xmap").toggle()
 end, { desc = "Toggle Xmap minimap" })

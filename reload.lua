@@ -1,9 +1,10 @@
--- AI HINTS: Reload helper for xmap.nvim development
--- AI HINTS: Usage: :luafile reload.lua
+
+-- PURPOSE:
+-- - Hot-reload xmap during interactive development.
+-- CONSTRAINTS:
+-- - Reset loaded modules before calling `setup()` again.
 
 print("Reloading xmap.nvim...")
-
--- AI HINTS: Close existing minimap
 local ok = pcall(function()
   require("xmap").close()
 end)
@@ -11,8 +12,6 @@ end)
 if ok then
   print("  ✓ Closed existing minimap")
 end
-
--- AI HINTS: Unload all xmap modules
 local count = 0
 for k, _ in pairs(package.loaded) do
   if k:match("^xmap") then
@@ -21,11 +20,9 @@ for k, _ in pairs(package.loaded) do
   end
 end
 print("  ✓ Unloaded " .. count .. " modules")
-
--- AI HINTS: Reload xmap
 local success, err = pcall(function()
   require("xmap").setup({
-    width = 40, -- AI HINTS: Wider to fit relative numbers + icons + text
+    width = 40,
     side = "right",
     treesitter = {
       enable = true,

@@ -1,5 +1,3 @@
--- AI HINTS: lua/xmap/lang/hpp.lua
--- PURPOSE: Alias `hpp` headers to C++ provider.
--- CONSTRAINTS: No custom logic; keep passthrough require only.
--- STABILITY: Core
+-- PURPOSE:
+-- - Alias `.hpp` to the C++ provider.
 return require("xmap.lang.cpp")

@@ -1,12 +1,7 @@
--- AI HINTS: lua/xmap/lang/markdown.lua
--- AI HINTS: Copyright (c) Ivan Tokar. MIT License.
--- AI HINTS: Markdown language support for xmap.nvim
---
--- AI HINTS: Provides a minimal heading parser to build a TOC-style minimap for Markdown:
--- AI HINTS: - ATX headings: #, ##, ...
--- AI HINTS: - Setext headings: title line + === / --- underline (rendered on the first line)
--- AI HINTS: - Fenced code block starts (``` / ~~~)
--- AI HINTS: - Images: ![alt](path)
+-- PURPOSE:
+-- - Build TOC-style minimap entries for Markdown headings and rich blocks.
+-- CONSTRAINTS:
+-- - Never emit entries for lines inside fenced code blocks.
 
 local M = {}
 
@@ -46,15 +41,9 @@ local QUERY_VARIANTS = {
     (section) @class
   ]],
 }
-
--- AI HINTS: -Get Tree-sitter query candidates for Markdown headings.
--- AI HINTS: -@return string[]
 function M.get_queries()
   return QUERY_VARIANTS
 end
-
--- AI HINTS: -Get the primary Tree-sitter query string for Markdown.
--- AI HINTS: -@return string
 function M.get_query()
   return QUERY_VARIANTS[1]
 end
@@ -85,6 +74,8 @@ local function parse_fence_marker(text)
 end
 
 local function get_fence_info(all_lines)
+  -- PURPOSE:
+  -- - Cache code-fence open/inside state per line set.
   if type(all_lines) ~= "table" then
     return nil
   end
@@ -293,13 +284,9 @@ local function html_tag_symbol(line_text)
 
   return { keyword = "html", capture_type = "class", display = "<" .. tag .. ">", icon = HTML_ICON }
 end
-
--- AI HINTS: -Parse a Markdown line into a heading symbol entry.
--- AI HINTS: -@param line_text string
--- AI HINTS: -@param line_nr integer|nil
--- AI HINTS: -@param all_lines string[]|nil
--- AI HINTS: -@return {keyword:string, capture_type:string, display:string}|nil
 function M.parse_symbol(line_text, line_nr, all_lines)
+  -- DO:
+  -- - Prefer headings before inline artifacts such as links or images.
   if type(line_text) ~= "string" or line_text == "" then
     return nil
   end
@@ -321,8 +308,6 @@ function M.parse_symbol(line_text, line_nr, all_lines)
       end
     end
   end
-
-  -- AI HINTS: Avoid rendering the underline line for setext headings.
   if trimmed:match("^=+$") or trimmed:match("^-+$") then
     return nil
   end

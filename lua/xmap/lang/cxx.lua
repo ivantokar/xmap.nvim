@@ -1,5 +1,3 @@
--- AI HINTS: lua/xmap/lang/cxx.lua
--- PURPOSE: Alias `cxx` filetype to canonical C++ provider.
--- CONSTRAINTS: No custom logic; keep passthrough require only.
--- STABILITY: Core
+-- PURPOSE:
+-- - Alias `cxx` to the C++ provider.
 return require("xmap.lang.cpp")

@@ -1,23 +1,8 @@
--- AI HINTS: lua/xmap/minimap.lua
--- AI HINTS: Copyright (c) Ivan Tokar. MIT License.
--- AI HINTS: Minimap window and rendering logic for xmap.nvim
---
--- AI HINTS: This is the core runtime module of the plugin. It owns:
--- AI HINTS: - the minimap scratch buffer + split window
--- AI HINTS: - render/update loops (throttled, cursor-only updates)
--- AI HINTS: - mapping between minimap lines and source buffer lines
--- AI HINTS: - applying multiple highlight layers (viewport, cursor, prefix, structure)
---
--- AI HINTS: Important separation of concerns:
--- AI HINTS: - Language-specific parsing lives in provider modules (`lua/xmap/lang/<filetype>.lua`)
--- AI HINTS: - Keyword filtering rules live in `symbols.lua`
--- AI HINTS: - Tree-sitter queries + node extraction live in `treesitter.lua`
--- AI HINTS: - Highlight group definitions/overrides live in `highlight.lua`
---
--- AI HINTS: The minimap is a *derived view*: it does not necessarily include every source line.
--- AI HINTS: When a line *is* rendered, we record a mapping:
--- AI HINTS: minimap_line (1-indexed) -> source_line (1-indexed)
--- AI HINTS: This mapping is used by navigation/jump logic.
+-- PURPOSE:
+-- - Own minimap buffer/window lifecycle, rendering, and follow-target state.
+-- CONSTRAINTS:
+-- - Keep parsing/provider logic outside this module.
+-- - Treat the minimap as a derived view backed by `line_mapping`.
 
 local config = require("xmap.config")
 local highlight = require("xmap.highlight")
@@ -28,12 +13,11 @@ local navigation = require("xmap.navigation")
 
 local M = {}
 
--- AI HINTS: The relative distance column is capped to keep layout stable.
+-- PURPOSE:
+-- - Cap prefix width so relative numbers never widen the minimap layout.
 local MAX_RELATIVE_DISTANCE = 999
 
 local function pad_right(text, width)
-	-- AI HINTS: Pad using display width so multi-byte symbols (e.g. "↓", "·") don't produce
-	-- AI HINTS: unexpected extra spaces. This keeps the prefix visually aligned.
 	text = text or ""
 	local len = vim.api.nvim_strwidth(text)
 	if len >= width then
@@ -43,8 +27,6 @@ local function pad_right(text, width)
 end
 
 local function build_relative_prefix_settings(opts)
-	-- AI HINTS: Normalize the `render.relative_prefix` config into a compact table the render loop
-	-- AI HINTS: can reuse. This is called once per full render and cached in `M.state`.
 	local render_opts = (opts and opts.render) or {}
 	local rp = type(render_opts.relative_prefix) == "table" and render_opts.relative_prefix or {}
 
@@ -79,9 +61,6 @@ local function build_relative_prefix_settings(opts)
 end
 
 local function format_relative_prefix(source_line, current_line, settings)
-	-- AI HINTS: Produce the prefix shown at the start of each minimap line, e.g.:
-	-- AI HINTS: " 12 ↓ " (distance + direction + trailing separator)
-	-- AI HINTS: The prefix is re-rendered frequently (cursor moves), so keep it cheap.
 	local delta = source_line - current_line
 	local direction = "current"
 	if delta < 0 then
@@ -104,38 +83,29 @@ local function format_relative_prefix(source_line, current_line, settings)
 
 	return direction, prefix
 end
-
--- AI HINTS: Minimap state
 M.state = {
-	-- AI HINTS: Window/buffer handles
-	bufnr = nil, -- AI HINTS: Minimap scratch buffer (render target)
-	winid = nil, -- AI HINTS: Minimap split window
-	main_bufnr = nil, -- AI HINTS: Source buffer currently being mapped
-	main_winid = nil, -- AI HINTS: Window showing the source buffer
-
-	-- AI HINTS: Lifecycle flags/timers
+	bufnr = nil,
+	winid = nil,
+	main_bufnr = nil,
+	main_winid = nil,
 	is_open = false,
-	last_update = 0, -- AI HINTS: Last full render timestamp (ms)
-	update_timer = nil, -- AI HINTS: Throttle timer for full renders
-	last_relative_update = 0, -- AI HINTS: Last prefix-only update timestamp (ms)
-	relative_timer = nil, -- AI HINTS: Throttle timer for prefix-only updates
-
-	-- AI HINTS: Render caches
-	line_mapping = {}, -- AI HINTS: minimap_line -> source_line mapping (both 1-indexed)
-	content_by_line = {}, -- AI HINTS: minimap_line -> rendered content (without prefix)
-	entry_kinds = {}, -- AI HINTS: minimap_line -> entry kind ("symbol", "comment", etc.)
-	entry_symbols = {}, -- AI HINTS: minimap_line -> parsed symbol metadata (if any)
-	structural_nodes = {}, -- AI HINTS: Cached Tree-sitter nodes for structural highlighting
-	relative_prefix_settings = nil, -- AI HINTS: Cached prefix config (widths, symbols, separators)
-
-	-- AI HINTS: Navigation UX helpers
-	navigation_anchor_line = nil, -- AI HINTS: Base line for relative distances while minimap is focused
-	follow_scheduled = false, -- AI HINTS: Coalesce follow-current-buffer updates
+	last_update = 0,
+	update_timer = nil,
+	last_relative_update = 0,
+	relative_timer = nil,
+	line_mapping = {},
+	content_by_line = {},
+	entry_kinds = {},
+	entry_symbols = {},
+	structural_nodes = {},
+	relative_prefix_settings = nil,
+	navigation_anchor_line = nil,
+	follow_scheduled = false,
 }
 
 local function resolve_main_winid()
-	-- AI HINTS: Recover the current window showing the attached main buffer.
-	-- AI HINTS: This keeps cursor/relative-position updates working after window layout changes.
+	-- PURPOSE:
+	-- - Recover the active window that still shows `main_bufnr`.
 	if not (M.state.main_bufnr and vim.api.nvim_buf_is_valid(M.state.main_bufnr)) then
 		return nil
 	end
@@ -161,9 +131,8 @@ local function resolve_main_winid()
 end
 
 local function get_relative_base_line(main_winid)
-	-- AI HINTS: While the minimap is focused we can optionally "anchor" the base line so the
-	-- AI HINTS: relative numbers don't constantly shift under the cursor during navigation.
-	-- AI HINTS: This makes the minimap feel more like a stable list.
+	-- PURPOSE:
+	-- - Freeze the relative-number anchor while the minimap is focused.
 	local resolved_main_winid = main_winid
 	if
 		not (
@@ -184,66 +153,31 @@ local function get_relative_base_line(main_winid)
 	end
 	return M.state.navigation_anchor_line
 end
-
--- AI HINTS: Namespace for highlights
--- AI HINTS: We use separate namespaces so different highlight layers can be cleared independently:
--- AI HINTS: - viewport: the portion visible in the main window
--- AI HINTS: - cursor: the minimap cursor/selection row
--- AI HINTS: - syntax: relative prefix + comment/keyword highlights
--- AI HINTS: - structure: Tree-sitter structural highlights (function/class ranges)
 M.ns_viewport = highlight.create_namespace("viewport")
 M.ns_cursor = highlight.create_namespace("cursor")
-M.ns_syntax = highlight.create_namespace("syntax") -- AI HINTS: arrows, numbers, comments
-M.ns_structure = highlight.create_namespace("structure") -- AI HINTS: Tree-sitter structural scopes
-
--- AI HINTS: Create minimap buffer
--- OUTPUT: number: Buffer number
+M.ns_syntax = highlight.create_namespace("syntax")
+M.ns_structure = highlight.create_namespace("structure")
 function M.create_buffer()
 	local buf_name = "xmap://minimap"
-
-	-- AI HINTS: Check if a buffer with this name already exists
-	-- AI HINTS: (this can happen during hot-reload or when the plugin didn't clean up properly).
 	local existing_buf = vim.fn.bufnr(buf_name)
 	if existing_buf ~= -1 and vim.api.nvim_buf_is_valid(existing_buf) then
-		-- AI HINTS: Delete the existing buffer
 		pcall(vim.api.nvim_buf_delete, existing_buf, { force = true })
 	end
 
-	local buf = vim.api.nvim_create_buf(false, true) -- AI HINTS: No file, scratch buffer
-
-	-- AI HINTS: Set buffer options
-	-- AI HINTS: The minimap buffer is:
-	-- AI HINTS: - unlisted (doesn't show up in :ls)
-	-- AI HINTS: - wiped when hidden (so it won't linger)
-	-- AI HINTS: - marked as "xmap" filetype (useful for custom highlights if desired)
+	local buf = vim.api.nvim_create_buf(false, true)
 	vim.api.nvim_buf_set_option(buf, "buftype", "nofile")
 	vim.api.nvim_buf_set_option(buf, "swapfile", false)
 	vim.api.nvim_buf_set_option(buf, "bufhidden", "wipe")
 	vim.api.nvim_buf_set_option(buf, "buflisted", false)
 	vim.api.nvim_buf_set_option(buf, "filetype", "xmap")
 	vim.api.nvim_buf_set_name(buf, buf_name)
-
-	-- AI HINTS: We toggle `modifiable` only while writing new lines during updates.
-	-- AI HINTS: Keep it `true` here so the first render can populate content.
 	vim.api.nvim_buf_set_option(buf, "modifiable", true)
 
 	return buf
 end
-
--- AI HINTS: Create minimap window
--- INPUT: bufnr number: Buffer to display in minimap
--- OUTPUT: number: Window ID
 function M.create_window(bufnr)
 	local opts = config.get()
-
-	-- AI HINTS: Create split window instead of floating for better integration.
-	-- AI HINTS: We keep the minimap as a standard split so it plays well with window navigation
-	-- AI HINTS: and doesn't require floating-window sizing logic.
 	local current_win = vim.api.nvim_get_current_win()
-
-	-- AI HINTS: Create vertical split
-	-- AI HINTS: Use `botright`/`topleft` so the minimap stays pinned to the outer edge of the
-	-- AI HINTS: tabpage layout (instead of splitting relative to the currently-focused window).
 	if opts.side == "left" then
 		vim.cmd("topleft vsplit")
 	else
@@ -251,16 +185,8 @@ function M.create_window(bufnr)
 	end
 
 	local win = vim.api.nvim_get_current_win()
-
-	-- AI HINTS: Set the buffer in the new window
 	vim.api.nvim_win_set_buf(win, bufnr)
-
-	-- AI HINTS: Set window width
 	vim.api.nvim_win_set_width(win, opts.width)
-
-	-- AI HINTS: Set window options
-	-- AI HINTS: The minimap window is a "view only" panel: no line numbers, no wraps, no signs,
-	-- AI HINTS: and a fixed width so the layout stays stable while editing.
 	vim.api.nvim_win_set_option(win, "number", false)
 	vim.api.nvim_win_set_option(win, "relativenumber", false)
 	vim.api.nvim_win_set_option(win, "cursorline", false)
@@ -268,14 +194,12 @@ function M.create_window(bufnr)
 	vim.api.nvim_win_set_option(win, "signcolumn", "no")
 	vim.api.nvim_win_set_option(win, "foldcolumn", "0")
 	vim.api.nvim_win_set_option(win, "winfixwidth", true)
-	vim.api.nvim_win_set_option(win, "fillchars", "eob: ") -- AI HINTS: Remove ~ for empty lines
+	vim.api.nvim_win_set_option(win, "fillchars", "eob: ")
 	vim.api.nvim_win_set_option(
 		win,
 		"winhighlight",
 		"Normal:XmapBackground,NormalNC:XmapBackground,EndOfBuffer:XmapBackground,SignColumn:XmapBackground,FoldColumn:XmapBackground"
 	)
-
-	-- AI HINTS: Return to original window
 	vim.api.nvim_set_current_win(current_win)
 
 	return win
@@ -290,23 +214,9 @@ local MARKDOWN_HEADING_HIGHLIGHTS = {
 	H5 = "XmapMarkdownH5",
 	H6 = "XmapMarkdownH6",
 }
-
--- AI HINTS: Render a single line for the minimap (language-driven structural overview)
--- INPUT: line string: Original line from main buffer
--- INPUT: line_nr number: Line number (1-indexed)
--- INPUT: current_line number: Current base line in main buffer (1-indexed)
--- INPUT: all_lines table: All buffer lines (for context)
--- INPUT: ctx table: Rendering context (provider, enabled keywords, etc.)
--- OUTPUT: string|nil, string|nil, string|nil: Rendered line, content, and entry kind (or nil)
 function M.render_line(line, line_nr, current_line, all_lines, ctx)
-	-- AI HINTS: The minimap does not render every source line. A provider decides:
-	-- AI HINTS: - which comment lines are worth showing (including MARK/TODO markers)
-	-- AI HINTS: - which declarations count as a "symbol" entry (func/struct/enum/etc.)
-	--
-	-- AI HINTS: We return both:
-	-- AI HINTS: 1) the full rendered line (prefix + content)
-	-- AI HINTS: 2) the content portion only (used for fast prefix-only updates)
-	-- AI HINTS: 3) the entry kind (used for comment/symbol highlighting decisions)
+	-- PURPOSE:
+	-- - Render one source line into a minimap entry or skip it.
 	if not ctx or not ctx.provider then
 		return nil
 	end
@@ -317,7 +227,6 @@ function M.render_line(line, line_nr, current_line, all_lines, ctx)
 	local entry_symbol = nil
 
 	if trimmed ~= "" and ctx.provider.is_comment_line and ctx.provider.is_comment_line(trimmed) then
-		-- AI HINTS: Comments/markers are rendered as separate minimap entries with the comment icon.
 		if type(ctx.provider.render_comment) ~= "function" then
 			return nil
 		end
@@ -355,13 +264,10 @@ function M.render_line(line, line_nr, current_line, all_lines, ctx)
 			end
 		end
 	elseif type(ctx.provider.parse_symbol) == "function" then
-		-- AI HINTS: Symbols are identified by a cheap line parser that extracts the declaration kind and name.
 		local symbol = ctx.provider.parse_symbol(trimmed, line_nr, all_lines)
 		if not symbol then
 			return nil
 		end
-
-		-- AI HINTS: Apply per-language keyword filtering (configured via `opts.symbols.<filetype>`).
 		if not (ctx.enabled_symbol_keywords and ctx.enabled_symbol_keywords[symbol.keyword]) then
 			return nil
 		end
@@ -391,13 +297,6 @@ function M.render_line(line, line_nr, current_line, all_lines, ctx)
 	local _, prefix = format_relative_prefix(line_nr, current_line, ctx.prefix_settings)
 	return prefix .. content, content, entry_kind, entry_symbol
 end
-
--- AI HINTS: Render entire buffer content for minimap
--- INPUT: main_bufnr number: Main buffer to render
--- INPUT: main_winid number: Main window (to get current line)
--- INPUT: current_line_override number|nil: Optional base line override
--- OUTPUT: string[], integer[], table, table, string[], string[]:
--- AI HINTS: rendered_lines, line_mapping, structural_nodes, prefix_settings, content_by_line, entry_kinds, entry_symbols
 function M.render_buffer(main_bufnr, main_winid, current_line_override)
 	if not vim.api.nvim_buf_is_valid(main_bufnr) then
 		return {}, {}, {}, {}, {}, {}
@@ -405,8 +304,6 @@ function M.render_buffer(main_bufnr, main_winid, current_line_override)
 
 	local opts = config.get()
 	local prefix_settings = build_relative_prefix_settings(opts)
-
-	-- AI HINTS: Get current line in main buffer
 	local current_line = current_line_override or navigation.get_main_cursor_line(main_winid)
 
 	local lines = vim.api.nvim_buf_get_lines(main_bufnr, 0, -1, false)
@@ -414,24 +311,16 @@ function M.render_buffer(main_bufnr, main_winid, current_line_override)
 	local content_by_line = {}
 	local entry_kinds = {}
 	local entry_symbols = {}
-	local line_mapping = {} -- AI HINTS: Maps minimap line number to source line number
+	local line_mapping = {}
 	local structural_nodes = {}
-
-	-- AI HINTS: Identify which language provider to use (based on `vim.bo.filetype`).
-	-- AI HINTS: If no provider exists, xmap does not render anything for this buffer.
 	local filetype = vim.api.nvim_buf_get_option(main_bufnr, "filetype")
 	local provider = lang.get(filetype)
 	if not provider then
 		return {}, {}, {}, {}, {}, {}, {}
 	end
-
-	-- AI HINTS: Tree-sitter is optional and used only for structural highlighting.
-	-- AI HINTS: The minimap list itself is rendered using the provider's line parser.
 	if config.is_treesitter_enabled(filetype) then
 		structural_nodes = treesitter.get_structural_nodes(main_bufnr, filetype)
 	end
-
-	-- AI HINTS: Build the enabled keyword set once and reuse it for every line.
 	local enabled_symbol_keywords = symbols.get_enabled_keyword_set(
 		opts,
 		filetype,
@@ -452,42 +341,23 @@ function M.render_buffer(main_bufnr, main_winid, current_line_override)
 			table.insert(content_by_line, content or "")
 			table.insert(entry_kinds, entry_kind or "symbol")
 			table.insert(entry_symbols, entry_symbol)
-			table.insert(line_mapping, i) -- AI HINTS: Store source line number
+			table.insert(line_mapping, i)
 		end
 	end
 
 	return rendered, line_mapping, structural_nodes, prefix_settings, content_by_line, entry_kinds, entry_symbols
 end
-
--- AI HINTS: Apply highlighting for relative numbers, arrows, icons, and comments
--- INPUT: minimap_bufnr number: Minimap buffer
--- INPUT: main_bufnr number: Main buffer
--- INPUT: main_winid number: Main window
--- INPUT: current_line_override number|nil: Optional base line override
 function M.apply_relative_number_highlighting(minimap_bufnr, main_bufnr, main_winid, current_line_override)
-	-- AI HINTS: This highlight pass covers the "syntax layer" of the minimap:
-	-- AI HINTS: - relative distance number (XmapRelativeNumber)
-	-- AI HINTS: - direction indicator (XmapRelativeUp/Down/Current)
-	-- AI HINTS: - comment markers (MARK/TODO/FIXME/...)
-	-- AI HINTS: - comment lines (doc vs normal)
-	-- AI HINTS: - keyword + entity name highlighting for symbol lines
-	--
-	-- AI HINTS: It intentionally does not touch:
-	-- AI HINTS: - viewport background (ns_viewport)
-	-- AI HINTS: - minimap cursor line background (ns_cursor)
-	-- AI HINTS: - structural scope highlights (ns_structure)
+	-- PURPOSE:
+	-- - Repaint only prefix/comment/entity highlights on existing rendered lines.
+	-- CONSTRAINTS:
+	-- - Use cached `content_by_line` instead of reparsing source text.
 	if not vim.api.nvim_buf_is_valid(minimap_bufnr) or not vim.api.nvim_buf_is_valid(main_bufnr) then
 		return
 	end
 
 	local opts = config.get()
 	local prefix_settings = M.state.relative_prefix_settings or build_relative_prefix_settings(opts)
-
-	-- AI HINTS: Prefix layout is:
-	-- AI HINTS: [number_width chars][number_separator][indicator (padded)][separator]
-	--
-	-- AI HINTS: NOTE: highlight column indices are byte offsets. We compute lengths using `#`
-	-- AI HINTS: on the final prefix fragments to match Neovim's API expectations.
 	local number_width = prefix_settings.number_width or 3
 	local number_sep_len = #(prefix_settings.number_separator or "")
 	local number_end = number_width + number_sep_len
@@ -514,21 +384,11 @@ function M.apply_relative_number_highlighting(minimap_bufnr, main_bufnr, main_wi
 			provider.default_highlight_keywords or provider.default_symbol_keywords or {}
 		) or {}
 	end
-
-	-- AI HINTS: Clear previous highlights
 	highlight.clear(minimap_bufnr, M.ns_syntax)
-
-	-- AI HINTS: Get current line
 	local current_line = current_line_override or navigation.get_main_cursor_line(main_winid)
-
-	-- AI HINTS: Get minimap lines
 	local minimap_lines = vim.api.nvim_buf_get_lines(minimap_bufnr, 0, -1, false)
-
-	-- AI HINTS: Highlight each line
 	for minimap_line_nr = 1, #minimap_lines do
 		local line_text = minimap_lines[minimap_line_nr]
-
-		-- AI HINTS: Get actual source line number from mapping
 		local source_line_nr = M.state.line_mapping[minimap_line_nr]
 		if not source_line_nr then
 			goto continue
@@ -536,11 +396,7 @@ function M.apply_relative_number_highlighting(minimap_bufnr, main_bufnr, main_wi
 		local entry_kind = M.state.entry_kinds and M.state.entry_kinds[minimap_line_nr]
 
 		local delta = source_line_nr - current_line
-
-		-- AI HINTS: Highlight number portion
 		highlight.apply(minimap_bufnr, M.ns_syntax, "XmapRelativeNumber", minimap_line_nr - 1, 0, number_end)
-
-		-- AI HINTS: Highlight direction indicator portion
 		local direction = "current"
 		local hl_group = "XmapRelativeCurrent"
 		if delta < 0 then
@@ -553,8 +409,6 @@ function M.apply_relative_number_highlighting(minimap_bufnr, main_bufnr, main_wi
 
 		local indicator_end = indicator_start + (indicator_field_lens[direction] or 0)
 		highlight.apply(minimap_bufnr, M.ns_syntax, hl_group, minimap_line_nr - 1, indicator_start, indicator_end)
-
-		-- AI HINTS: Check for special comment markers (highlight the entire marker line for visibility)
 		if line_text:match("⚑ MARK:") then
 			local icon_pos = line_text:find("⚑")
 			if icon_pos then
@@ -628,7 +482,6 @@ function M.apply_relative_number_highlighting(minimap_bufnr, main_bufnr, main_wi
 				)
 			end
 		else
-			-- AI HINTS: Rendered comment lines start with a comment icon; highlight accordingly.
 			local comment_icon = COMMENT_ICON
 			local comment_icon_pos = line_text:find(comment_icon, 1, true)
 			if comment_icon_pos then
@@ -683,12 +536,8 @@ function M.apply_relative_number_highlighting(minimap_bufnr, main_bufnr, main_wi
 					goto continue
 				end
 			end
-
-			-- AI HINTS: Try to highlight keywords on ALL lines, not just structural nodes
-			-- AI HINTS: Text format: " 22↓ 󰊕 func init"
-			-- AI HINTS: Skip prefix and icons, then find the first letter
-			local _, text_start = line_text:find("^[^%a]*") -- AI HINTS: Skip everything that's not a letter
-			text_start = text_start and text_start + 1 -- AI HINTS: Position after non-letters
+			local _, text_start = line_text:find("^[^%a]*")
+			text_start = text_start and text_start + 1
 
 			if text_start and text_start <= #line_text then
 				local text_after_numbers = line_text:sub(text_start)
@@ -700,9 +549,7 @@ function M.apply_relative_number_highlighting(minimap_bufnr, main_bufnr, main_wi
 						if next_char ~= "" and next_char:match("[%w_]") then
 							goto continue_keyword
 						end
-
-						-- AI HINTS: Found keyword at start of text
-						local kw_pos_in_line = text_start - 1 + kw_start - 1 -- AI HINTS: Position in full line (0-indexed)
+						local kw_pos_in_line = text_start - 1 + kw_start - 1
 						local kw_end_pos_in_line = text_start - 1 + kw_end
 
 						local keyword_hl = "XmapRelativeKeyword"
@@ -714,8 +561,6 @@ function M.apply_relative_number_highlighting(minimap_bufnr, main_bufnr, main_wi
 								entity_hl = heading_hl
 							end
 						end
-
-						-- AI HINTS: Highlight keyword with colorscheme color
 						highlight.apply(
 							minimap_bufnr,
 							M.ns_syntax,
@@ -724,8 +569,6 @@ function M.apply_relative_number_highlighting(minimap_bufnr, main_bufnr, main_wi
 							kw_pos_in_line,
 							kw_end_pos_in_line
 						)
-
-						-- AI HINTS: Highlight entity name after keyword (starting right after the space)
 						local entity_start = kw_end_pos_in_line
 						if entity_start < #line_text then
 							highlight.apply(
@@ -746,21 +589,9 @@ function M.apply_relative_number_highlighting(minimap_bufnr, main_bufnr, main_wi
 		::continue::
 	end
 end
-
--- AI HINTS: Apply syntax highlighting based on Tree-sitter
--- INPUT: minimap_bufnr number: Minimap buffer
--- INPUT: main_bufnr number: Main buffer
--- INPUT: structural_nodes table|nil: Optional cached nodes
--- INPUT: current_line_override number|nil: Optional base line override
--- INPUT: prefix_settings_override table|nil: Optional cached prefix settings
 function M.apply_syntax_highlighting(minimap_bufnr, main_bufnr, structural_nodes, current_line_override, prefix_settings_override)
-	-- AI HINTS: Structural highlighting uses Tree-sitter nodes from `treesitter.get_structural_nodes`.
-	-- AI HINTS: We only apply these highlights to lines that are actually rendered in the minimap.
-	--
-	-- AI HINTS: Why compute the prefix length per line?
-	-- AI HINTS: Prefix width can vary when users provide multi-byte direction indicators or
-	-- AI HINTS: different separators. Instead of relying on a cached constant, we compute the
-	-- AI HINTS: exact prefix string for the line and highlight from `#prefix` onward.
+	-- PURPOSE:
+	-- - Apply structural highlights on top of rendered entries.
 	if not vim.api.nvim_buf_is_valid(minimap_bufnr) or not vim.api.nvim_buf_is_valid(main_bufnr) then
 		return
 	end
@@ -784,25 +615,15 @@ function M.apply_syntax_highlighting(minimap_bufnr, main_bufnr, structural_nodes
 	local prefix_settings = prefix_settings_override
 		or M.state.relative_prefix_settings
 		or build_relative_prefix_settings(opts)
-
-	-- AI HINTS: Clear previous structural highlights without touching relative/arrow highlights
 	highlight.clear(minimap_bufnr, M.ns_structure)
-
-	-- AI HINTS: Build a reverse lookup: source line -> minimap line
 	local line_lookup = {}
 	for minimap_line, source_line in ipairs(M.state.line_mapping or {}) do
 		line_lookup[source_line] = minimap_line
 	end
-
-	-- AI HINTS: Get structural nodes from Tree-sitter
 	local nodes = structural_nodes or treesitter.get_structural_nodes(main_bufnr, filetype)
-
-	-- AI HINTS: Apply highlights for each structural node (only if rendered in minimap)
 	for _, node in ipairs(nodes) do
 		local hl_group = treesitter.get_highlight_for_type(node.type)
-
-		-- AI HINTS: Minimaps render only key structural lines, so highlight the start line if present
-		local source_line = node.start_line + 1 -- AI HINTS: convert to 1-indexed
+		local source_line = node.start_line + 1
 		local minimap_line = line_lookup[source_line]
 		if minimap_line then
 			if filetype == "markdown" then
@@ -828,8 +649,6 @@ function M.highlight_cursor_line(minimap_bufnr, minimap_line)
 	if not minimap_line or minimap_line < 1 then
 		return
 	end
-
-	-- AI HINTS: Use an extmark with `hl_eol` so the highlight covers the full window width.
 	pcall(vim.api.nvim_buf_set_extmark, minimap_bufnr, M.ns_cursor, minimap_line - 1, 0, {
 		hl_group = "XmapCursor",
 		hl_eol = true,
@@ -837,14 +656,9 @@ function M.highlight_cursor_line(minimap_bufnr, minimap_line)
 		priority = 100,
 	})
 end
-
--- AI HINTS: Update only the relative prefix + highlighting for cursor moves.
 function M.update_relative_only()
-	-- AI HINTS: CursorMoved events happen frequently. A full render re-parses the whole buffer,
-	-- AI HINTS: so for performance we keep a "prefix-only" path:
-	-- AI HINTS: - reuse previously rendered content (icons + text) from `M.state.content_by_line`
-	-- AI HINTS: - re-render only the relative prefix for each minimap line
-	-- AI HINTS: - re-apply highlights that depend on prefix positions
+	-- PURPOSE:
+	-- - Refresh prefixes/highlights without reparsing the full buffer.
 	if not M.state.is_open or not M.state.bufnr or not M.state.main_bufnr then
 		return
 	end
@@ -856,7 +670,6 @@ function M.update_relative_only()
 
 	local main_winid = resolve_main_winid()
 	if not main_winid then
-		-- AI HINTS: Try to recover target tracking on the next event tick.
 		M.follow_current_target()
 		return
 	end
@@ -889,11 +702,8 @@ function M.update_relative_only()
 		vim.api.nvim_buf_set_lines(M.state.bufnr, 0, -1, false, updated)
 		vim.api.nvim_buf_set_option(M.state.bufnr, "modifiable", false)
 	end
-
-	-- AI HINTS: Clear background-style highlights (viewport/cursor) and refresh syntax highlights.
 	highlight.clear(M.state.bufnr, M.ns_viewport)
 	highlight.clear(M.state.bufnr, M.ns_cursor)
-	-- AI HINTS: Structural highlights are re-applied too because they start *after* the prefix.
 	M.apply_syntax_highlighting(M.state.bufnr, M.state.main_bufnr, M.state.structural_nodes, current_line, prefix_settings)
 	M.apply_relative_number_highlighting(M.state.bufnr, M.state.main_bufnr, main_winid, current_line)
 
@@ -910,7 +720,6 @@ function M.update_relative_only()
 end
 
 function M.throttled_relative_update()
-	-- AI HINTS: Debounce prefix-only updates to avoid spamming work during rapid cursor motion.
 	local opts = config.get()
 	local now = vim.loop.now()
 
@@ -926,14 +735,7 @@ function M.throttled_relative_update()
 
 	M.update_relative_only()
 end
-
--- AI HINTS: Update minimap content
 function M.update()
-	-- AI HINTS: Full render path:
-	-- AI HINTS: - re-scan buffer lines
-	-- AI HINTS: - re-run provider parsing and keyword filtering
-	-- AI HINTS: - refresh structural nodes (Tree-sitter) if enabled
-	-- AI HINTS: - update the minimap buffer lines + caches
 	if not M.state.is_open or not M.state.bufnr or not M.state.main_bufnr then
 		return
 	end
@@ -945,17 +747,12 @@ function M.update()
 
 	local main_winid = resolve_main_winid()
 	if not main_winid then
-		-- AI HINTS: Main window may have been replaced; request a follow pass and retry later.
 		M.follow_current_target()
 		return
 	end
-
-	-- AI HINTS: Render buffer content with relative line numbers
 	local current_line = get_relative_base_line(main_winid)
 	local rendered_lines, line_mapping, structural_nodes, prefix_settings, content_by_line, entry_kinds, entry_symbols =
 		M.render_buffer(M.state.main_bufnr, main_winid, current_line)
-
-	-- AI HINTS: Store line mapping for navigation
 	M.state.line_mapping = line_mapping
 	M.state.content_by_line = content_by_line or {}
 	M.state.entry_kinds = entry_kinds or {}
@@ -964,19 +761,13 @@ function M.update()
 	if prefix_settings then
 		M.state.relative_prefix_settings = prefix_settings
 	end
-
-	-- AI HINTS: Update minimap buffer
 	vim.api.nvim_buf_set_option(M.state.bufnr, "modifiable", true)
 	vim.api.nvim_buf_set_lines(M.state.bufnr, 0, -1, false, rendered_lines)
 	vim.api.nvim_buf_set_option(M.state.bufnr, "modifiable", false)
-
-	-- AI HINTS: Apply syntax highlighting for arrows, numbers, icons, and structure
 	highlight.clear(M.state.bufnr, M.ns_viewport)
 	highlight.clear(M.state.bufnr, M.ns_cursor)
 	M.apply_syntax_highlighting(M.state.bufnr, M.state.main_bufnr, structural_nodes, current_line, prefix_settings)
 	M.apply_relative_number_highlighting(M.state.bufnr, M.state.main_bufnr, main_winid, current_line)
-
-	-- AI HINTS: Update minimap cursor to follow main buffer
 	local main_line = navigation.get_main_cursor_line(main_winid)
 	if M.state.winid and vim.api.nvim_win_is_valid(M.state.winid) then
 		local is_minimap_focused = vim.api.nvim_get_current_win() == M.state.winid
@@ -989,17 +780,10 @@ function M.update()
 
 	M.state.last_update = vim.loop.now()
 end
-
--- AI HINTS: Throttled update function
 function M.throttled_update()
-	-- AI HINTS: Debounce full renders to avoid doing heavy work on every keystroke.
-	-- AI HINTS: The throttle interval is shared with prefix-only updates for consistency.
 	local opts = config.get()
 	local now = vim.loop.now()
-
-	-- AI HINTS: Check if enough time has passed since last update
 	if now - M.state.last_update < opts.render.throttle_ms then
-		-- AI HINTS: Schedule update for later
 		if M.state.update_timer then
 			M.state.update_timer:stop()
 		end
@@ -1013,15 +797,14 @@ function M.throttled_update()
 
 	M.update()
 end
-
--- AI HINTS: Follow the currently active window/buffer when minimap is open.
--- AI HINTS: This keeps the minimap in sync when switching buffers or windows.
 function M._follow_current_target()
-	-- AI HINTS: This function implements "follow active buffer" semantics:
-	-- AI HINTS: 1) If the currently focused window/buffer is a supported target, attach to it.
-	-- AI HINTS: 2) Else, if the previously attached target still exists, try to find a window showing it.
-	-- AI HINTS: 3) Else, scan all windows for the first supported target.
-	-- AI HINTS: 4) If no supported buffers remain, close the minimap.
+	-- PURPOSE:
+	-- - Reattach the minimap to the best supported buffer/window after editor state changes.
+	-- ALGORITHM:
+	-- - Prefer the current non-minimap window if supported.
+	-- - Reuse the existing main buffer when still visible.
+	-- - Fall back to any other supported window.
+	-- - Close the minimap if no supported target remains.
 	if not M.state.is_open then
 		return
 	end
@@ -1046,7 +829,6 @@ function M._follow_current_target()
 	end
 
 	local function attach_target(main_bufnr, main_winid)
-		-- AI HINTS: Switching targets requires updating autocmds (buffer-local) and re-rendering.
 		local buffer_changed = main_bufnr ~= M.state.main_bufnr
 		local win_changed = main_winid ~= M.state.main_winid
 
@@ -1114,8 +896,6 @@ function M._follow_current_target()
 end
 
 function M.follow_current_target()
-	-- AI HINTS: Coalesce multiple follow requests into a single scheduled callback.
-	-- AI HINTS: This avoids "double renders" when multiple autocmds fire in a row.
 	if M.state.follow_scheduled then
 		return
 	end
@@ -1125,60 +905,37 @@ function M.follow_current_target()
 		M._follow_current_target()
 	end)
 end
-
--- AI HINTS: Open minimap for current buffer
 function M.open()
-	-- AI HINTS: Creates the minimap buffer + window and attaches to the currently active buffer.
-	-- AI HINTS: All further following/switching is handled by follow_current_target/autocmds.
-	-- AI HINTS: Check if already open
 	if M.state.is_open and M.state.winid and vim.api.nvim_win_is_valid(M.state.winid) then
 		return
 	end
-
-	-- AI HINTS: Get current buffer and window
 	local main_bufnr = vim.api.nvim_get_current_buf()
 	local main_winid = vim.api.nvim_get_current_win()
-
-	-- AI HINTS: Check if filetype is supported
 	local filetype = vim.api.nvim_buf_get_option(main_bufnr, "filetype")
 	if not config.is_filetype_supported(filetype) then
 		vim.notify("Minimap not supported for filetype: " .. filetype, vim.log.levels.INFO)
 		return
 	end
-
-	-- AI HINTS: Create buffer and window
 	local bufnr = M.create_buffer()
 	local winid = M.create_window(bufnr)
-
-	-- AI HINTS: Store state
 	M.state.bufnr = bufnr
 	M.state.winid = winid
 	M.state.main_bufnr = main_bufnr
 	M.state.main_winid = main_winid
 	M.state.is_open = true
-
-	-- AI HINTS: Set up keymaps for minimap
 	navigation.setup_minimap_keymaps(bufnr, winid, main_bufnr, main_winid)
-
-	-- AI HINTS: Initial render
 	M.update()
-
-	-- AI HINTS: Set up autocommands for updating minimap
 	M.setup_autocommands()
 end
-
--- AI HINTS: Close minimap
 function M.close()
-	-- AI HINTS: Stops timers, removes autocmds, closes the minimap window, deletes the buffer,
-	-- AI HINTS: and resets state so a future open starts clean.
+	-- PURPOSE:
+	-- - Tear down timers, autocmds, scratch state, and the minimap window.
 	if not M.state.is_open then
 		return
 	end
 
 	local minimap_bufnr = M.state.bufnr
 	local minimap_winid = M.state.winid
-
-	-- AI HINTS: Clear timers
 	if M.state.update_timer then
 		M.state.update_timer:stop()
 		M.state.update_timer = nil
@@ -1187,13 +944,7 @@ function M.close()
 		M.state.relative_timer:stop()
 		M.state.relative_timer = nil
 	end
-
-	-- AI HINTS: Clear autocommands
 	pcall(vim.api.nvim_del_augroup_by_name, "XmapUpdate")
-
-	-- AI HINTS: Close window (or repurpose it if it's the last window in the tabpage)
-	-- AI HINTS: When the minimap is the only window left in a tabpage, closing it would close the
-	-- AI HINTS: entire tab/window. Instead, we "repurpose" it by showing some other buffer.
 	if minimap_winid and vim.api.nvim_win_is_valid(minimap_winid) then
 		local tabpage = vim.api.nvim_win_get_tabpage(minimap_winid)
 		local wins = vim.api.nvim_tabpage_list_wins(tabpage)
@@ -1201,6 +952,8 @@ function M.close()
 		if #wins > 1 then
 			pcall(vim.api.nvim_win_close, minimap_winid, true)
 		else
+			-- CONSTRAINTS:
+			-- - Do not close the last window in the tabpage.
 			local replacement_bufnr = nil
 
 			if
@@ -1233,13 +986,9 @@ function M.close()
 			end
 		end
 	end
-
-	-- AI HINTS: Delete buffer
 	if minimap_bufnr and vim.api.nvim_buf_is_valid(minimap_bufnr) then
 		pcall(vim.api.nvim_buf_delete, minimap_bufnr, { force = true })
 	end
-
-	-- AI HINTS: Reset state
 	M.state.bufnr = nil
 	M.state.winid = nil
 	M.state.main_bufnr = nil
@@ -1254,8 +1003,6 @@ function M.close()
 	M.state.navigation_anchor_line = nil
 	M.state.follow_scheduled = false
 end
-
--- AI HINTS: Toggle minimap
 function M.toggle()
 	if M.state.is_open then
 		M.close()
@@ -1263,11 +1010,9 @@ function M.toggle()
 		M.open()
 	end
 end
-
--- AI HINTS: Set up autocommands for minimap updates
 function M.setup_autocommands()
-	-- AI HINTS: Autocmds are buffer-local to the current main buffer and are recreated whenever
-	-- AI HINTS: the minimap attaches to a different buffer.
+	-- PURPOSE:
+	-- - Keep rendering, follow-target, and cursor sync attached to the current main buffer.
 	local augroup = vim.api.nvim_create_augroup("XmapUpdate", { clear = true })
 
 	local function sync_main_window_from_event()
@@ -1281,8 +1026,6 @@ function M.setup_autocommands()
 			M.state.main_winid = current_winid
 		end
 	end
-
-	-- AI HINTS: Update on text changes
 	vim.api.nvim_create_autocmd({ "TextChanged", "TextChangedI" }, {
 		group = augroup,
 		buffer = M.state.main_bufnr,
@@ -1291,15 +1034,11 @@ function M.setup_autocommands()
 			M.throttled_update()
 		end,
 	})
-
-	-- AI HINTS: Update on cursor movement
 	vim.api.nvim_create_autocmd("CursorMoved", {
 		group = augroup,
 		buffer = M.state.main_bufnr,
 		callback = function()
 			sync_main_window_from_event()
-
-			-- AI HINTS: Use the fast prefix-only update if we already have a mapping.
 			if
 				M.state.bufnr
 				and vim.api.nvim_buf_is_valid(M.state.bufnr)
@@ -1312,10 +1051,6 @@ function M.setup_autocommands()
 			M.throttled_update()
 		end,
 	})
-
-	-- AI HINTS: Keep a cursor highlight inside the minimap:
-	-- AI HINTS: - while focused: follows minimap cursor (navigation)
-	-- AI HINTS: - while not focused: follows main cursor mapping
 	vim.api.nvim_create_autocmd({ "BufWinEnter", "WinEnter" }, {
 		group = augroup,
 		buffer = M.state.bufnr,
@@ -1389,8 +1124,6 @@ function M.setup_autocommands()
 			end
 		end,
 	})
-
-	-- AI HINTS: Update on buffer write
 	vim.api.nvim_create_autocmd("BufWritePost", {
 		group = augroup,
 		buffer = M.state.main_bufnr,
@@ -1399,8 +1132,6 @@ function M.setup_autocommands()
 			M.update()
 		end,
 	})
-
-	-- AI HINTS: Close minimap when main buffer is closed, deleted, or unloaded
 	vim.api.nvim_create_autocmd({ "BufWipeout", "BufDelete", "BufUnload" }, {
 		group = augroup,
 		buffer = M.state.main_bufnr,
@@ -1408,8 +1139,6 @@ function M.setup_autocommands()
 			M.follow_current_target()
 		end,
 	})
-
-	-- AI HINTS: Keep minimap target in sync when switching buffers/windows.
 	vim.api.nvim_create_autocmd({ "BufEnter", "WinEnter", "FileType" }, {
 		group = augroup,
 		callback = function()
@@ -1420,8 +1149,6 @@ function M.setup_autocommands()
 			M.follow_current_target()
 		end,
 	})
-
-	-- AI HINTS: Handle window resize
 	vim.api.nvim_create_autocmd("VimResized", {
 		group = augroup,
 		callback = function()
@@ -1432,9 +1159,6 @@ function M.setup_autocommands()
 		end,
 	})
 end
-
--- AI HINTS: Check if minimap is open
--- OUTPUT: boolean
 function M.is_open()
 	return M.state.is_open
 end
