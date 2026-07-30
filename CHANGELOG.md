@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.3 - 2026-07-30
+
+- Optimize the Xmap logo asset, reducing repository and installation size while preserving its displayed dimensions.
+
 ## 0.8.2 - 2026-04-21
 
 - Migrate comments across the repository codebase to AI-oriented contract style.

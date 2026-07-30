@@ -198,6 +198,6 @@ function M.diagnose()
   
   print("=== End Diagnostics ===")
 end
-M.version = "0.8.2"
+M.version = "0.8.3"
 
 return M
