@@ -25,6 +25,8 @@ See [TESTING.md](TESTING.md) for full details.
 
 ## Pull requests
 
+- Do all work on a temporary branch; never commit or push directly to `main`.
+- Open a pull request to merge a temporary branch into `main`. `main` requires passing `smoke-tests` before it can be merged.
 - Keep PRs focused and small when possible.
 - Update docs (`README.md`, `TESTING.md`) if behavior changes.
 - Add/update tests when you fix bugs or add features.
